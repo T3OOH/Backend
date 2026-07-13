@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// USUÁRIOS & AUTENTICAÇÃO
+// ==========================================
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MANAGER
+}
+
+// ==========================================
+// PAINÉIS DE LED (MAPA E PRODUTOS)
+// ==========================================
+model Panel {
+  id          String   @id @default(uuid())
+  name        String
+  lat         Float    // Corrigido para bater com o frontend
+  lng         Float    // Corrigido para bater com o frontend
+  size        String   // Corrigido para bater com o frontend (Ex: 10m x 4m)
+  px          String   // Corrigido para bater com o frontend (Ex: 1920x1080)
+  impacts     String   // Corrigido para texto (Ex: 400 mil/dia)
+  status      PanelStatus @default(AVAILABLE)
+
+  // Transformados em Opcionais (?) para não dar erro na hora de salvar
+  description String?  @db.Text
+  address     String?
+  city        String?
+  state       String?
+  images      String[] 
+  
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  analytics   AnalyticsEvent[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([city, state])
+  @@map("panels")
+}
+
+enum PanelStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  panels      Panel[]
+
+  @@map("categories")
+}
+
+// ==========================================
+// CRM & CONTATOS
+// ==========================================
+model Contact {
+  id        String   @id @default(uuid())
+  name      String
+  company   String?
+  phone     String
+  email     String
+  message   String   @db.Text
+  ip        String?
+  userAgent String?
+  origin    String?  // Ex: "Página de Contato", "Botão Mapa"
+  status    ContactStatus @default(PENDING)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contacts")
+}
+
+enum ContactStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+}
+
+// ==========================================
+// CONFIGURAÇÕES DINÂMICAS (CMS / SEO)
+// ==========================================
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique // Ex: "HERO_TITLE", "SEO_DESCRIPTION"
+  value     String   @db.Text
+  group     String   // Ex: "HOME", "SEO", "CONTACT"
+  
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+  @@map("system_settings")
+}
+
+// ==========================================
+// ANALYTICS & RASTREAMENTO
+// ==========================================
+model AnalyticsEvent {
+  id          String   @id @default(uuid())
+  eventType   String   // Ex: "PAGE_VIEW", "PANEL_CLICK", "CONTACT_CLICK"
+  path        String?  
+  
+  panelId     String?
+  panel       Panel?   @relation(fields: [panelId], references: [id], onDelete: SetNull)
+
+  ip          String?
+  os          String?
+  browser     String?
+  deviceModel String?
+  country     String?
+  city        String?
+  referer     String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([eventType, createdAt])
+  @@map("analytics_events")
+}
