@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updatePanelSchema = exports.createPanelSchema = void 0;
 const zod_1 = require("zod");
+
 exports.createPanelSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "O nome é obrigatório"),
     lat: zod_1.z.number(),

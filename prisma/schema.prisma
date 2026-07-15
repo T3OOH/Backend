@@ -39,8 +39,6 @@ model Panel {
   px          String   // Corrigido para bater com o frontend (Ex: 1920x1080)
   impacts     String   // Corrigido para texto (Ex: 400 mil/dia)
   status      PanelStatus @default(AVAILABLE)
-
-  // Transformados em Opcionais (?) para não dar erro na hora de salvar
   description String?  @db.Text
   address     String?
   city        String?
