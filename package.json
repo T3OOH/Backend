@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "admin:create": "tsx src/scripts/create-admin.ts"

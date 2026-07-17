@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PanelRepository = void 0;
+const client_1 = require("@prisma/client");
 const prisma_1 = require("../database/prisma");
 class PanelRepository {
     async create(data) {
@@ -9,29 +10,32 @@ class PanelRepository {
     async findById(id) {
         return prisma_1.prisma.panel.findUnique({
             where: { id },
-            include: { category: true }
+            include: { category: true },
         });
     }
     async findAll(filters = {}) {
         return prisma_1.prisma.panel.findMany({
             where: filters,
             include: { category: true },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
         });
     }
     async findForMap() {
         return prisma_1.prisma.panel.findMany({
-            where: { status: 'AVAILABLE' },
+            where: { status: client_1.PanelStatus.AVAILABLE },
             select: {
                 id: true,
                 name: true,
-                latitude: true,
-                longitude: true,
+                lat: true,
+                lng: true,
                 city: true,
                 state: true,
                 status: true,
-                categoryId: true
-            }
+                images: true,
+                impacts: true,
+                size: true,
+                px: true,
+            },
         });
     }
     async update(id, data) {

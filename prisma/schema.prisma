@@ -6,9 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-// ==========================================
-// USUÁRIOS & AUTENTICAÇÃO
-// ==========================================
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -21,112 +18,73 @@ model User {
   @@map("users")
 }
 
-enum Role {
-  USER
-  ADMIN
-  MANAGER
-}
-
-// ==========================================
-// PAINÉIS DE LED (MAPA E PRODUTOS)
-// ==========================================
 model Panel {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   name        String
-  lat         Float    
-  lng         Float    
-  size        String   
-  px          String   
-  impacts     String   
-  price       Float?   
-  status      PanelStatus @default(AVAILABLE)
-  description String?  @db.Text
+  description String?
   address     String?
   city        String?
   state       String?
-  images      String[] 
-  
+  images      String[]
   categoryId  String?
-  category    Category? @relation(fields: [categoryId], references: [id])
-
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  impacts     String
+  lat         Float
+  lng         Float
+  px          String
+  size        String
+  price       Float?
+  status      PanelStatus      @default(AVAILABLE)
   analytics   AnalyticsEvent[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  category    Category?        @relation(fields: [categoryId], references: [id])
 
   @@index([city, state])
   @@map("panels")
 }
 
-enum PanelStatus {
-  AVAILABLE
-  OCCUPIED
-  MAINTENANCE
-  RESERVED
-}
-
 model Category {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   description String?
   panels      Panel[]
 
   @@map("categories")
 }
 
-// ==========================================
-// CRM & CONTATOS
-// ==========================================
 model Contact {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   name      String
   company   String?
   phone     String
   email     String
-  message   String   @db.Text
+  message   String
   ip        String?
   userAgent String?
-  origin    String?  // Ex: "Página de Contato", "Botão Mapa"
+  origin    String?
   status    ContactStatus @default(PENDING)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@map("contacts")
 }
 
-enum ContactStatus {
-  PENDING
-  IN_PROGRESS
-  RESOLVED
-}
-
-// ==========================================
-// CONFIGURAÇÕES DINÂMICAS (CMS / SEO)
-// ==========================================
 model SystemSetting {
   id        String   @id @default(uuid())
-  key       String   @unique // Ex: "HERO_TITLE", "SEO_DESCRIPTION"
-  value     String   @db.Text
-  group     String   // Ex: "HOME", "SEO", "CONTACT"
-  
+  key       String   @unique
+  value     String
+  group     String
   updatedAt DateTime @updatedAt
 
   @@index([group])
   @@map("system_settings")
 }
 
-// ==========================================
-// ANALYTICS & RASTREAMENTO
-// ==========================================
 model AnalyticsEvent {
   id          String   @id @default(uuid())
-  eventType   String   // Ex: "PAGE_VIEW", "PANEL_CLICK", "CONTACT_CLICK"
-  path        String?  
-  
+  eventType   String
+  path        String?
   panelId     String?
-  panel       Panel?   @relation(fields: [panelId], references: [id], onDelete: SetNull)
-
   ip          String?
   os          String?
   browser     String?
@@ -134,9 +92,28 @@ model AnalyticsEvent {
   country     String?
   city        String?
   referer     String?
-
   createdAt   DateTime @default(now())
+  panel       Panel?   @relation(fields: [panelId], references: [id])
 
   @@index([eventType, createdAt])
   @@map("analytics_events")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum PanelStatus {
+  AVAILABLE
+  MAINTENANCE
+  RESERVED
+  OCCUPIED
+}
+
+enum ContactStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
 }

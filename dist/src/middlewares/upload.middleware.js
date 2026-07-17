@@ -5,19 +5,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadMiddleware = void 0;
 const multer_1 = __importDefault(require("multer"));
-const storage = multer_1.default.memoryStorage();
+const allowedMimeTypes = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+]);
 exports.uploadMiddleware = (0, multer_1.default)({
-    storage,
+    storage: multer_1.default.memoryStorage(),
     limits: {
-        fileSize: 5 * 1024 * 1024, // Limite de 5MB
+        fileSize: 5 * 1024 * 1024,
+        files: 1,
     },
-    fileFilter: (req, file, cb) => {
-        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (allowedMimeTypes.includes(file.mimetype)) {
-            cb(null, true);
+    fileFilter: (_req, file, callback) => {
+        if (!allowedMimeTypes.has(file.mimetype)) {
+            return callback(new Error('Formato inválido. Envie JPG, PNG ou WEBP.'));
         }
-        else {
-            cb(new Error('Formato de arquivo inválido. Apenas JPG, PNG e WEBP são aceitos.'));
-        }
+        return callback(null, true);
     },
 });
