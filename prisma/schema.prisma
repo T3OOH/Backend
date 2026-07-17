@@ -33,11 +33,12 @@ enum Role {
 model Panel {
   id          String   @id @default(uuid())
   name        String
-  lat         Float    // Corrigido para bater com o frontend
-  lng         Float    // Corrigido para bater com o frontend
-  size        String   // Corrigido para bater com o frontend (Ex: 10m x 4m)
-  px          String   // Corrigido para bater com o frontend (Ex: 1920x1080)
-  impacts     String   // Corrigido para texto (Ex: 400 mil/dia)
+  lat         Float    
+  lng         Float    
+  size        String   
+  px          String   
+  impacts     String   
+  price       Float?   
   status      PanelStatus @default(AVAILABLE)
   description String?  @db.Text
   address     String?
@@ -61,6 +62,7 @@ enum PanelStatus {
   AVAILABLE
   OCCUPIED
   MAINTENANCE
+  RESERVED
 }
 
 model Category {
