@@ -1,14 +1,20 @@
+import http from 'http';
 import app from './app';
 import { env } from './config/env';
 import { prisma } from './database/prisma';
+import { initWebSocket } from './websocket';
 
-const server = app.listen(env.PORT, () => {
+const httpServer = http.createServer(app);
+
+initWebSocket(httpServer);
+
+httpServer.listen(env.PORT, () => {
     console.log(`[T3 OOH Backend] Servidor rodando na porta ${env.PORT}.`);
 });
 
 function shutdown() {
-    console.log('Encerrando servidor de forma segura...');
-    server.close(() => {
+    console.log('[Sistema] Encerrando servidor de forma segura...');
+    httpServer.close(() => {
         void prisma.$disconnect().finally(() => process.exit(0));
     });
 }

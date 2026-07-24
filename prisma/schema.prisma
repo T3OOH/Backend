@@ -6,14 +6,25 @@ datasource db {
   provider = "postgresql"
 }
 
+// ==========================================
+// CORE DOMAIN
+// ==========================================
+
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String         @id @default(uuid())
+  name           String
+  email          String         @unique
+  password       String
+  phone          String?        
+  company        String?
+  role           Role           @default(USER)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  orders         Order[]
+  crmClients     CrmClient[]    @relation("SellerClients")
+  crmDeals       CrmDeal[]      @relation("SellerDeals")
+  crmActivities  CrmActivity[]  @relation("SellerActivities")
+  createdCoupons CrmCoupon[]    @relation("CouponCreator")
 
   @@map("users")
 }
@@ -27,8 +38,6 @@ model Panel {
   state       String?
   images      String[]
   categoryId  String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
   impacts     String
   lat         Float
   lng         Float
@@ -36,21 +45,46 @@ model Panel {
   size        String
   price       Float?
   status      PanelStatus      @default(AVAILABLE)
-  analytics   AnalyticsEvent[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   category    Category?        @relation(fields: [categoryId], references: [id])
+  analytics   AnalyticsEvent[]
+  orders      Order[]
+  dealItems   CrmDealItem[]    // <--- RELAÇÃO ADICIONADA AQUI
 
   @@index([city, state])
   @@map("panels")
 }
 
 model Category {
-  id          String  @id @default(uuid())
-  name        String  @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   description String?
   panels      Panel[]
 
   @@map("categories")
 }
+
+model Order {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  panelId     String?
+  panel       Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
+  status      OrderStatus @default(PENDING)
+  totalValue  Float       @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("orders")
+}
+
+// ==========================================
+// SYSTEM & ANALYTICS
+// ==========================================
 
 model Contact {
   id        String        @id @default(uuid())
@@ -99,9 +133,159 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
+// ==========================================
+// CRM / COMMERCIAL DOMAIN
+// ==========================================
+
+model CrmClient {
+  id          String         @id @default(uuid())
+  sellerId    String
+  seller      User           @relation("SellerClients", fields: [sellerId], references: [id])
+  name        String
+  document    String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+  company     String?
+  city        String?
+  state       String?
+  avatarUrl   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deals       CrmDeal[]
+  messages    CrmMessage[]
+  activities  CrmActivity[]
+  notes       CrmNote[]
+  coupons     CrmCoupon[]
+
+  @@map("crm_clients")
+}
+
+model CrmDeal {
+  id            String         @id @default(uuid())
+  clientId      String
+  client        CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sellerId      String?
+  seller        User?           @relation("SellerDeals", fields: [sellerId], references: [id])
+  title         String
+  expectedValue Float          @default(0)
+  probability   Int            @default(0)
+  stage         DealStage      @default(NEW_LEAD)
+  status        DealStatus     @default(OPEN)
+  expectedDate  DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  items         CrmDealItem[]
+  messages      CrmMessage[]
+
+  @@map("crm_deals")
+}
+
+// =========================================================================
+// DOCUMENTAÇÃO TÉCNICA: EXTENSÃO CRM PARA CHECKOUT
+// Motivo: Permitir que um Deal (Ticket/Oportunidade) possua N painéis.
+// O priceSnapshot garante a imutabilidade do valor negociado inicialmente,
+// padrão essencial em arquiteturas financeiras e de CRM B2B.
+// =========================================================================
+
+model CrmDealItem {
+  id            String   @id @default(uuid())
+  dealId        String
+  deal          CrmDeal  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  panelId       String
+  panel         Panel    @relation(fields: [panelId], references: [id])
+  priceSnapshot Float    @default(0) 
+
+  @@map("crm_deal_items")
+}
+
+model CrmMessage {
+  id          String         @id @default(uuid())
+  dealId      String?        
+  deal        CrmDeal?       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  senderId    String         
+  content     String?
+  mediaUrl    String?
+  mediaType   String?
+  isRead      Boolean        @default(false)
+  isInternal  Boolean        @default(false) 
+  createdAt   DateTime       @default(now())
+
+  @@map("crm_messages")
+}
+
+model CrmActivity {
+  id          String         @id @default(uuid())
+  clientId    String
+  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      User           @relation("SellerActivities", fields: [sellerId], references: [id])
+  type        ActivityType
+  title       String
+  description String?
+  dueDate     DateTime
+  isCompleted Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("crm_activities")
+}
+
+model CrmNote {
+  id          String         @id @default(uuid())
+  clientId    String
+  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorId    String
+  content     String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("crm_notes")
+}
+
+model CrmCoupon {
+  id           String        @id @default(uuid())
+  code         String        @unique
+  creatorId    String
+  creator      User          @relation("CouponCreator", fields: [creatorId], references: [id])
+  discountType DiscountType
+  value        Float
+  minValue     Float?
+  validUntil   DateTime?
+  singleUse    Boolean       @default(false)
+  isUsed       Boolean       @default(false)
+  usedById     String?
+  usedBy       CrmClient?    @relation(fields: [usedById], references: [id])
+  usedAt       DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@map("crm_coupons")
+}
+
+model AgendaTask {
+  id        String   @id @default(uuid())
+  title     String
+  client    String
+  time      String   // Ex: "09:00"
+  date      DateTime // Data do compromisso
+  type      String   // "call", "meeting", "message", "task"
+  status    String   @default("pending") // "pending" ou "completed"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agenda_tasks")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
 enum Role {
   ADMIN
   MANAGER
+  COMERCIAL
   USER
 }
 
@@ -116,4 +300,39 @@ enum ContactStatus {
   PENDING
   IN_PROGRESS
   RESOLVED
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum DealStage {
+  NEW_LEAD
+  FIRST_CONTACT
+  NEGOTIATION
+  WAITING_REPLY
+  PROPOSAL_SENT
+  POST_SALES
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum ActivityType {
+  CALL
+  MEETING
+  MESSAGE
+  FOLLOW_UP
+  RENEWAL
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_VALUE
 }
