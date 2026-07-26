@@ -3,12 +3,12 @@ import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
+import axios from 'axios'; 
 
 import { prisma } from '../database/prisma';
 import { env } from '../config/env';
 import { loginSchema, registerSchema } from '../validators/auth.validator';
 
-// Instancia o cliente do Resend (adicione a variável no seu arquivo de env)
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 function toPublicUser(user: {
@@ -25,16 +25,51 @@ function toPublicUser(user: {
     };
 }
 
+// ==========================================
+// FUNÇÃO DE VALIDAÇÃO DO RECAPTCHA
+// ==========================================
+async function verifyReCaptcha(token: string): Promise<boolean> {
+    if (!token) return false;
+    
+    const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+    if (!secretKey) {
+        console.error('AVISO: RECAPTCHA_SECRET_KEY não encontrada no arquivo .env do backend!');
+        return false; 
+    }
+
+    try {
+        const response = await axios.post(
+            `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${token}`
+        );
+        return response.data.success; 
+    } catch (error) {
+        console.error("Erro na comunicação com a API do reCAPTCHA:", error);
+        return false;
+    }
+}
+
 export const authController = {
     // ==========================================
-    // LOGIN & REGISTER MANTIDOS INTACTOS
+    // LOGIN COM RECAPTCHA
     // ==========================================
     async login(req: Request, res: Response) {
-        const { email, password } = loginSchema.parse(req.body);
+        const { captchaToken, email, password } = req.body;
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        if (!captchaToken) {
+            return res.status(400).json({ error: 'Captcha obrigatório. Confirme que você não é um robô.' });
+        }
 
-        if (!user || !(await bcrypt.compare(password, user.password))) {
+        const isCaptchaValid = await verifyReCaptcha(captchaToken);
+        if (!isCaptchaValid) {
+            return res.status(400).json({ error: 'Falha na verificação do Captcha. Tente novamente.' });
+        }
+
+        // CORREÇÃO AQUI: Passamos um objeto limpo apenas com o que o Zod espera, ignorando o captchaToken
+        const validatedData = loginSchema.parse({ email, password });
+
+        const user = await prisma.user.findUnique({ where: { email: validatedData.email } });
+
+        if (!user || !(await bcrypt.compare(validatedData.password, user.password))) {
             return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
 
@@ -54,15 +89,30 @@ export const authController = {
         });
     },
 
+    // ==========================================
+    // REGISTER COM RECAPTCHA
+    // ==========================================
     async register(req: Request, res: Response) {
-        const { name, email, password } = registerSchema.parse(req.body);
+        const { captchaToken, name, email, password } = req.body;
+
+        if (!captchaToken) {
+            return res.status(400).json({ error: 'Captcha obrigatório. Confirme que você não é um robô.' });
+        }
+
+        const isCaptchaValid = await verifyReCaptcha(captchaToken);
+        if (!isCaptchaValid) {
+            return res.status(400).json({ error: 'Falha na verificação do Captcha. Tente novamente.' });
+        }
+
+        // CORREÇÃO AQUI: Passamos um objeto limpo para o Zod
+        const validatedData = registerSchema.parse({ name, email, password });
 
         try {
             const user = await prisma.user.create({
                 data: {
-                    name,
-                    email,
-                    password: await bcrypt.hash(password, 12),
+                    name: validatedData.name,
+                    email: validatedData.email,
+                    password: await bcrypt.hash(validatedData.password, 12),
                     role: Role.USER,
                 },
             });
@@ -83,7 +133,7 @@ export const authController = {
     },
 
     // ==========================================
-    // NOVAS ROTAS DE RECUPERAÇÃO DE SENHA
+    // ROTAS DE RECUPERAÇÃO DE SENHA (MANTIDAS)
     // ==========================================
     async forgotPassword(req: Request, res: Response) {
         const { email } = req.body;
@@ -94,12 +144,10 @@ export const authController = {
 
         const user = await prisma.user.findUnique({ where: { email } });
 
-        // Segurança: Evita vazamento de dados. Responde sucesso mesmo se o e-mail não existir.
         if (!user) {
             return res.json({ message: 'Se o e-mail existir, o link foi enviado.' });
         }
 
-        // Cria um JWT exclusivo para reset de senha, válido por 15 minutos
         const resetToken = jwt.sign(
             { id: user.id, purpose: 'reset-password' },
             env.JWT_SECRET,
@@ -111,7 +159,7 @@ export const authController = {
         try {
             await resend.emails.send({
                 from: 'T3 OOH System <onboarding@resend.dev>',
-                to: user.email, // No plano free do Resend, teste com seu e-mail cadastrado lá!
+                to: user.email, 
                 subject: 'Recuperação de Senha - T3 OOH',
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #111113; color: #fff; padding: 40px; border-radius: 16px;">
@@ -138,17 +186,14 @@ export const authController = {
         }
 
         try {
-            // Valida o token e se certifica de que é um token de reset
             const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string, purpose: string };
 
             if (decoded.purpose !== 'reset-password') {
                 throw new Error('Token inválido.');
             }
 
-            // Encripta a nova senha
             const hashedPassword = await bcrypt.hash(password, 12);
 
-            // Atualiza o banco de dados via Prisma
             await prisma.user.update({
                 where: { id: decoded.id },
                 data: { password: hashedPassword }
