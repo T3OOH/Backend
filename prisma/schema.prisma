@@ -18,6 +18,7 @@ model User {
   phone          String?        
   company        String?
   role           Role           @default(USER)
+  isEmailVerified Boolean       @default(false)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   orders         Order[]
