@@ -20,6 +20,12 @@ const createDealSchema = z.object({
     probability: z.number().min(0).max(100).default(0),
 });
 
+// Atualizado para a nova estrutura de Checkout do Frontend
+interface CheckoutItem {
+    panelId: string;
+    priceSnapshot: number;
+}
+
 interface CheckoutPayload {
     clientDetails: {
         name: string;
@@ -28,7 +34,10 @@ interface CheckoutPayload {
         company?: string;
         message?: string;
     };
-    panelIds: string[];
+    contractMonths: number;
+    originalValue: number;
+    expectedValue: number;
+    items: CheckoutItem[];
     source?: string;
 }
 
@@ -131,10 +140,16 @@ export const crmController = {
 
     async getGlobalDeals(req: Request, res: Response) {
         try {
+            // Buscando todos os painéis dentro dos itens para o PDF no frontend ter os dados
             const deals = await prisma.crmDeal.findMany({
                 include: { 
                     client: { select: { name: true, email: true, phone: true, company: true } },
-                    seller: { select: { name: true } }
+                    seller: { select: { name: true } },
+                    items: {
+                        include: {
+                            panel: true
+                        }
+                    }
                 },
                 orderBy: { createdAt: 'desc' }
             });
@@ -147,10 +162,6 @@ export const crmController = {
 
     async claimDeal(req: Request, res: Response) {
         try {
-            /* 
-             * CORREÇÃO: O parâmetro definido na rota é ':dealId', portanto
-             * devemos extrair req.params.dealId ao invés de req.params.id
-             */
             const id = String(req.params.dealId);
             const userId = String((req as any).user.id);
 
@@ -188,7 +199,7 @@ export const crmController = {
                     client: { select: { name: true, avatarUrl: true } },
                     items: {
                         include: {
-                            panel: { select: { name: true } }
+                            panel: { select: { name: true, city: true, state: true } }
                         }
                     }
                 },
@@ -302,7 +313,6 @@ export const crmController = {
         }
     },
 
-    // Fetch chat history for a specific deal
     async getChatHistory(req: Request, res: Response) {
         try {
             const dealId = String(req.params.dealId);
@@ -323,23 +333,18 @@ export const crmController = {
         }
     },
 
+    // Nova Rota Refatorada (Cria Deal com Itens Estruturados e Mensagem Rica)
     async createCheckoutDeal(req: Request, res: Response) {
         try {
-            const { clientDetails, panelIds, source } = req.body as CheckoutPayload;
+            const { clientDetails, contractMonths, originalValue, expectedValue, items, source } = req.body as CheckoutPayload;
 
             if (!clientDetails?.name || !clientDetails?.email || !clientDetails?.phone) {
                 return res.status(400).json({ error: 'Dados do cliente incompletos.' });
             }
 
-            if (!panelIds || panelIds.length === 0) {
+            if (!items || items.length === 0) {
                 return res.status(400).json({ error: 'O carrinho não pode estar vazio.' });
             }
-
-            const panels = await prisma.panel.findMany({
-                where: { id: { in: panelIds } }
-            });
-
-            const expectedValue = panels.reduce((acc, p) => acc + (p.price || 0), 0);
 
             const deal = await prisma.$transaction(async (tx) => {
                 
@@ -369,26 +374,55 @@ export const crmController = {
                     });
                 }
 
+                // Cria o Deal e já insere os itens ao mesmo tempo (Poder do Prisma)
                 const newDeal = await tx.crmDeal.create({
                     data: {
-                        title: `Orçamento de Circuito - ${client.name.split(' ')[0]}`,
+                        title: `Cotação via ${source === 'INTERACTIVE_MAP' ? 'Mapa' : 'Catálogo'} - ${contractMonths} meses`,
                         clientId: client.id,
-                        expectedValue,
+                        expectedValue: expectedValue,
+                        originalValue: originalValue,
+                        contractMonths: contractMonths,
                         probability: 0,
+                        items: {
+                            create: items.map(item => ({
+                                panelId: item.panelId,
+                                priceSnapshot: item.priceSnapshot
+                            }))
+                        }
+                    },
+                    // Retorna incluindo os itens e dados do painel para uso futuro
+                    include: {
+                        items: {
+                            include: {
+                                panel: true
+                            }
+                        }
                     }
                 });
 
-                await tx.crmDealItem.createMany({
-                    data: panels.map(p => ({
-                        dealId: newDeal.id,
-                        panelId: p.id,
-                        priceSnapshot: p.price || 0
-                    }))
-                });
+                // ==============================================================
+                // CRIAÇÃO DA MENSAGEM AUTOMÁTICA RICA NO CHAT
+                // ==============================================================
+                const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+                
+                // Lista os painéis com a cidade e o valor rateado
+                const panelDetailsText = newDeal.items.map(item => {
+                    const p = item.panel;
+                    const location = p.city && p.state ? `(${String(p.city).toUpperCase()} - ${String(p.state).toUpperCase()})` : '';
+                    return `• ${location} ${p.name}: ${formatCurrency(item.priceSnapshot)}`;
+                }).join('\n');
 
-                const initialText = `Solicitação via ${source === 'INTERACTIVE_MAP' ? 'Mapa' : 'Catálogo'}.\n\n` +
-                                    `Painéis Solicitados: ${panels.map(p => p.name).join(', ')}.\n\n` +
-                                    `Mensagem do Cliente: ${clientDetails.message || 'Nenhuma observação inserida.'}`;
+                const economy = originalValue > expectedValue ? originalValue - expectedValue : 0;
+                const monthlyInvestment = expectedValue / contractMonths;
+
+                // Monta o texto bonitinho
+                const initialText = `NOVA SOLICITAÇÃO DE ORÇAMENTO via ${source === 'INTERACTIVE_MAP' ? 'Mapa' : 'Catálogo'}\n\n` +
+                    `Duração da Campanha: ${contractMonths} ${contractMonths === 1 ? 'mês' : 'meses'}\n` +
+                    `Investimento Mensal: ${formatCurrency(monthlyInvestment)}\n` +
+                    `Valor Total do Contrato (${contractMonths}x): ${formatCurrency(expectedValue)}\n` +
+                    (economy > 0 ? `Economia aplicada no pacote: ${formatCurrency(economy)}*\n\n` : '\n') +
+                    `PAINÉIS SELECIONADOS:\n${panelDetailsText}\n\n` +
+                    `NOTAS DO CLIENTE:\n${clientDetails.message || 'Nenhuma observação inserida pelo cliente.'}`;
                 
                 await tx.crmMessage.create({
                     data: {

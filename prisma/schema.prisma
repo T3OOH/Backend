@@ -51,7 +51,7 @@ model Panel {
   category    Category?        @relation(fields: [categoryId], references: [id])
   analytics   AnalyticsEvent[]
   orders      Order[]
-  dealItems   CrmDealItem[]    // <--- RELAÇÃO ADICIONADA AQUI
+  dealItems   CrmDealItem[]    // <--- RELAÇÃO CORRETA
 
   @@index([city, state])
   @@map("panels")
@@ -67,18 +67,18 @@ model Category {
 }
 
 model Order {
-  id          String      @id @default(uuid())
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  panelId     String?
-  panel       Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
-  status      OrderStatus @default(PENDING)
-  totalValue  Float       @default(0)
-  startDate   DateTime?
-  endDate     DateTime?
-  notes       String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String      @id @default(uuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  panelId    String?
+  panel      Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
+  status     OrderStatus @default(PENDING)
+  totalValue Float       @default(0)
+  startDate  DateTime?
+  endDate    DateTime?
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   @@map("orders")
 }
@@ -139,55 +139,50 @@ model AnalyticsEvent {
 // ==========================================
 
 model CrmClient {
-  id          String         @id @default(uuid())
-  sellerId    String
-  seller      User           @relation("SellerClients", fields: [sellerId], references: [id])
-  name        String
-  document    String?
-  email       String?
-  phone       String?
-  whatsapp    String?
-  company     String?
-  city        String?
-  state       String?
-  avatarUrl   String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  deals       CrmDeal[]
-  messages    CrmMessage[]
-  activities  CrmActivity[]
-  notes       CrmNote[]
-  coupons     CrmCoupon[]
+  id        String         @id @default(uuid())
+  sellerId  String
+  seller    User           @relation("SellerClients", fields: [sellerId], references: [id])
+  name      String
+  document  String?
+  email     String?
+  phone     String?
+  whatsapp  String?
+  company   String?
+  city      String?
+  state     String?
+  avatarUrl String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deals     CrmDeal[]
+  messages  CrmMessage[]
+  activities CrmActivity[]
+  notes     CrmNote[]
+  coupons   CrmCoupon[]
 
   @@map("crm_clients")
 }
 
 model CrmDeal {
-  id            String         @id @default(uuid())
-  clientId      String
-  client        CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  sellerId      String?
-  seller        User?           @relation("SellerDeals", fields: [sellerId], references: [id])
-  title         String
-  expectedValue Float          @default(0)
-  probability   Int            @default(0)
-  stage         DealStage      @default(NEW_LEAD)
-  status        DealStatus     @default(OPEN)
-  expectedDate  DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  items         CrmDealItem[]
-  messages      CrmMessage[]
+  id             String         @id @default(uuid())
+  clientId       String
+  client         CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sellerId       String?
+  seller         User?          @relation("SellerDeals", fields: [sellerId], references: [id])
+  title          String
+  expectedValue  Float          @default(0)
+  contractMonths Int            @default(1)
+  originalValue  Float          @default(0)
+  probability    Int            @default(0)
+  stage          DealStage      @default(NEW_LEAD)
+  status         DealStatus     @default(OPEN)
+  expectedDate   DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  items          CrmDealItem[]
+  messages       CrmMessage[]
 
   @@map("crm_deals")
 }
-
-// =========================================================================
-// DOCUMENTAÇÃO TÉCNICA: EXTENSÃO CRM PARA CHECKOUT
-// Motivo: Permitir que um Deal (Ticket/Oportunidade) possua N painéis.
-// O priceSnapshot garante a imutabilidade do valor negociado inicialmente,
-// padrão essencial em arquiteturas financeiras e de CRM B2B.
-// =========================================================================
 
 model CrmDealItem {
   id            String   @id @default(uuid())
@@ -201,18 +196,18 @@ model CrmDealItem {
 }
 
 model CrmMessage {
-  id          String         @id @default(uuid())
-  dealId      String?        
-  deal        CrmDeal?       @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  clientId    String
-  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  senderId    String         
-  content     String?
-  mediaUrl    String?
-  mediaType   String?
-  isRead      Boolean        @default(false)
-  isInternal  Boolean        @default(false) 
-  createdAt   DateTime       @default(now())
+  id         String         @id @default(uuid())
+  dealId     String?        
+  deal       CrmDeal?       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  clientId   String
+  client     CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  senderId   String         
+  content    String?
+  mediaUrl   String?
+  mediaType  String?
+  isRead     Boolean        @default(false)
+  isInternal Boolean        @default(false) 
+  createdAt  DateTime       @default(now())
 
   @@map("crm_messages")
 }
@@ -235,13 +230,13 @@ model CrmActivity {
 }
 
 model CrmNote {
-  id          String         @id @default(uuid())
-  clientId    String
-  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  authorId    String
-  content     String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id        String         @id @default(uuid())
+  clientId  String
+  client    CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorId  String
+  content   String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
   @@map("crm_notes")
 }
