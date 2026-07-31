@@ -41,28 +41,26 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "frame-ancestors": ["'self'", "http://localhost:3000", "http://localhost:5173", env.FRONTEND_URL].filter(Boolean) as string[],
+            "frame-ancestors": ["'self'", "http://localhost:3000", "http://localhost:5173", "https://t3ooh.com", "https://www.t3ooh.com", env.FRONTEND_URL].filter(Boolean) as string[],
         },
     },
 }));
 app.disable('x-powered-by');
 
 /**
- * Configuração e liberação de CORS.
+ * ========================================================
+ * CORS "À PROVA DE BALAS" (DINÂMICO)
+ * ========================================================
+ * Removemos a lista fixa para evitar bloqueios de www ou 
+ * cache. Esta função permite a passagem dinâmica.
  */
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://frontend-h3ik-mu.vercel.app',
-    env.FRONTEND_URL 
-].filter(Boolean); 
-
 app.use(cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+        callback(null, true); 
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     credentials: true,
-    maxAge: 86400,
 }));
 
 /**
