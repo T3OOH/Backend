@@ -7,93 +7,315 @@ datasource db {
 }
 
 // ==========================================
-// CORE DOMAIN
+// 1. TENANCY & IAM (Identity and Access Management)
 // ==========================================
 
+/// Entidade organizacional (B2B). Agrupa usuários e pedidos.
+model Company {
+  id            String   @id @default(uuid())
+  cnpj          String   @unique
+  corporateName String   // Razão Social
+  tradeName     String?  // Nome Fantasia
+  email         String?
+  phone         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users         User[]   // Relacionamento 1:N - Usuários vinculados à empresa
+  orders        Order[]  // Relacionamento 1:N - Pedidos gerados pela empresa
+
+  @@map("companies")
+}
+
+/// Usuários do sistema (Vendedores, Gestores, Clientes).
 model User {
-  id             String         @id @default(uuid())
-  name           String
-  email          String         @unique
-  password       String
-  phone          String?        
-  company        String?
-  role           Role           @default(USER)
-  isEmailVerified Boolean       @default(false)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  orders         Order[]
-  crmClients     CrmClient[]    @relation("SellerClients")
-  crmDeals       CrmDeal[]      @relation("SellerDeals")
-  crmActivities  CrmActivity[]  @relation("SellerActivities")
-  createdCoupons CrmCoupon[]    @relation("CouponCreator")
+  id              String   @id @default(uuid())
+  name            String
+  email           String   @unique
+  password        String
+  phone           String?
+  document        String?  // Armazena CPF (PF) ou CNPJ (PJ)
+  personType      String?  @default("PF") // Identificador de natureza jurídica ("PF" ou "PJ")
+  companyName     String?  @map("company") // Dado legado mantido para retrocompatibilidade
+  
+  companyId       String?
+  company         Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  role            Role     @default(USER)
+  isEmailVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relacionamentos Inversos
+  orders          Order[]
+  crmClients      CrmClient[]   @relation("SellerClients")
+  crmDeals        CrmDeal[]     @relation("SellerDeals")
+  crmActivities   CrmActivity[] @relation("SellerActivities")
+  createdCoupons  CrmCoupon[]   @relation("CouponCreator")
+  crmNotes        CrmNote[]     @relation("NoteAuthor")
 
   @@map("users")
 }
 
+// ==========================================
+// 2. INVENTORY & PRODUCT DOMAIN
+// ==========================================
+
+/// Representa os pontos físicos de exibição OOH (Painéis de LED, etc).
 model Panel {
-  id          String           @id @default(uuid())
+  id          String      @id @default(uuid())
   name        String
-  description String?
+  description String?     @db.Text
   address     String?
   city        String?
   state       String?
   images      String[]
   categoryId  String?
-  impacts     String
+  impacts     String      // Tráfego estimado / Impressões
   lat         Float
   lng         Float
-  px          String
-  size        String
+  px          String      // Resolução em pixels
+  size        String      // Dimensões físicas (ex: "7x3")
   price       Float?
-  status      PanelStatus      @default(AVAILABLE)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  category    Category?        @relation(fields: [categoryId], references: [id])
+  status      PanelStatus @default(AVAILABLE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  category    Category?   @relation(fields: [categoryId], references: [id])
   analytics   AnalyticsEvent[]
   orders      Order[]
-  dealItems   CrmDealItem[]    // <--- RELAÇÃO CORRETA
+  dealItems   CrmDealItem[]
 
   @@index([city, state])
   @@map("panels")
 }
 
+/// Categorização do Inventário (Outdoor, Indoor, Totem, etc).
 model Category {
   id          String   @id @default(uuid())
   name        String   @unique
-  description String?
+  description String?  @db.Text
   panels      Panel[]
 
   @@map("categories")
 }
 
+// ==========================================
+// 3. SALES & OPERATIONS
+// ==========================================
+
+/// Transações fechadas e ordens de veiculação (Gestão Operacional).
 model Order {
-  id         String      @id @default(uuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  panelId    String?
-  panel      Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
-  status     OrderStatus @default(PENDING)
-  totalValue Float       @default(0)
-  startDate  DateTime?
-  endDate    DateTime?
-  notes      String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id          String      @id @default(uuid())
+  
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  panelId     String?
+  panel       Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
+  
+  status      OrderStatus @default(PENDING)
+  totalValue  Float       @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@map("orders")
 }
 
 // ==========================================
-// SYSTEM & ANALYTICS
+// 4. CRM & PIPELINE DOMAIN
 // ==========================================
 
+/// Clientes captados/gerenciados no funil de vendas.
+model CrmClient {
+  id          String   @id @default(uuid())
+  
+  sellerId    String
+  seller      User     @relation("SellerClients", fields: [sellerId], references: [id])
+  
+  name        String
+  document    String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+  company     String?
+  city        String?
+  state       String?
+  avatarUrl   String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  deals       CrmDeal[]
+  messages    CrmMessage[]
+  activities  CrmActivity[]
+  notes       CrmNote[]
+  coupons     CrmCoupon[]
+
+  @@map("crm_clients")
+}
+
+/// Oportunidades de negócio e orçamentos (Pipeline).
+model CrmDeal {
+  id             String      @id @default(uuid())
+  
+  clientId       String
+  client         CrmClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  sellerId       String?
+  seller         User?       @relation("SellerDeals", fields: [sellerId], references: [id])
+  
+  title          String
+  expectedValue  Float       @default(0)
+  contractMonths Int         @default(1)
+  originalValue  Float       @default(0)
+  probability    Int         @default(0)
+  stage          DealStage   @default(NEW_LEAD)
+  status         DealStatus  @default(OPEN)
+  expectedDate   DateTime?
+  
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  
+  items          CrmDealItem[]
+  messages       CrmMessage[]
+
+  @@map("crm_deals")
+}
+
+/// Pontos (Painéis) vinculados a uma oportunidade do CRM.
+model CrmDealItem {
+  id            String  @id @default(uuid())
+  dealId        String
+  deal          CrmDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  panelId       String
+  panel         Panel   @relation(fields: [panelId], references: [id])
+  priceSnapshot Float   @default(0) // Armazena o valor negociado no momento do orçamento
+
+  @@map("crm_deal_items")
+}
+
+/// Histórico de comunicação vinculada a um lead/oportunidade.
+model CrmMessage {
+  id          String     @id @default(uuid())
+  
+  dealId      String?   
+  deal        CrmDeal?   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  
+  clientId    String
+  client      CrmClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  senderId    String     // Pode armazenar ID do User (Vendedor) ou Client (Mensagem externa via WA)
+  content     String?    @db.Text
+  mediaUrl    String?
+  mediaType   String?
+  isRead      Boolean    @default(false)
+  isInternal  Boolean    @default(false) // Define se é nota interna invisível ao cliente
+  createdAt   DateTime   @default(now())
+
+  @@map("crm_messages")
+}
+
+/// Tarefas e touchpoints (Reuniões, Ligações) executadas pelos vendedores.
+model CrmActivity {
+  id          String       @id @default(uuid())
+  clientId    String
+  client      CrmClient    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      User         @relation("SellerActivities", fields: [sellerId], references: [id])
+  type        ActivityType
+  title       String
+  description String?      @db.Text
+  dueDate     DateTime
+  isCompleted Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("crm_activities")
+}
+
+/// Anotações estruturadas sobre um cliente específico.
+model CrmNote {
+  id          String    @id @default(uuid())
+  clientId    String
+  client      CrmClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation("NoteAuthor", fields: [authorId], references: [id])
+  content     String    @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("crm_notes")
+}
+
+/// Cupons promocionais focados na aquisição e conversão via CRM.
+model CrmCoupon {
+  id           String       @id @default(uuid())
+  code         String       @unique
+  creatorId    String
+  creator      User         @relation("CouponCreator", fields: [creatorId], references: [id])
+  discountType DiscountType
+  value        Float
+  minValue     Float?
+  validUntil   DateTime?
+  singleUse    Boolean      @default(false)
+  isUsed       Boolean      @default(false)
+  usedById     String?
+  usedBy       CrmClient?   @relation(fields: [usedById], references: [id])
+  usedAt       DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@map("crm_coupons")
+}
+
+// ==========================================
+// 5. SYSTEM, METRICS & SETTINGS
+// ==========================================
+
+/// Agenda simplificada/global do sistema.
+model AgendaTask {
+  id        String   @id @default(uuid())
+  title     String
+  client    String   // Nome do cliente armazenado de forma desnormalizada para buscas rápidas
+  time      String   // Formato 24h, Ex: "09:00"
+  date      DateTime // Data do compromisso
+  type      String   // Categoria ("call", "meeting", "message", "task")
+  status    String   @default("pending") // "pending" | "completed"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agenda_tasks")
+}
+
+/// Banners promocionais/campanhas ativas no frontend público.
+model Banner {
+  id        String   @id @default(uuid())
+  title     String?
+  imageUrl  String
+  linkUrl   String?
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("banners")
+}
+
+/// Formulário de contato público do site.
 model Contact {
   id        String        @id @default(uuid())
   name      String
   company   String?
   phone     String
   email     String
-  message   String
+  message   String        @db.Text
   ip        String?
   userAgent String?
   origin    String?
@@ -104,6 +326,7 @@ model Contact {
   @@map("contacts")
 }
 
+/// Configurações paramétricas do sistema (Feature Toggles, Variáveis Dinâmicas).
 model SystemSetting {
   id        String   @id @default(uuid())
   key       String   @unique
@@ -115,11 +338,13 @@ model SystemSetting {
   @@map("system_settings")
 }
 
+/// Registro de tráfego, cliques e acesso (Auditoria e Tracking de Mídia).
 model AnalyticsEvent {
   id          String   @id @default(uuid())
   eventType   String
   path        String?
   panelId     String?
+  panel       Panel?   @relation(fields: [panelId], references: [id])
   ip          String?
   os          String?
   browser     String?
@@ -128,154 +353,13 @@ model AnalyticsEvent {
   city        String?
   referer     String?
   createdAt   DateTime @default(now())
-  panel       Panel?   @relation(fields: [panelId], references: [id])
 
   @@index([eventType, createdAt])
   @@map("analytics_events")
 }
 
 // ==========================================
-// CRM / COMMERCIAL DOMAIN
-// ==========================================
-
-model CrmClient {
-  id        String         @id @default(uuid())
-  sellerId  String
-  seller    User           @relation("SellerClients", fields: [sellerId], references: [id])
-  name      String
-  document  String?
-  email     String?
-  phone     String?
-  whatsapp  String?
-  company   String?
-  city      String?
-  state     String?
-  avatarUrl String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  deals     CrmDeal[]
-  messages  CrmMessage[]
-  activities CrmActivity[]
-  notes     CrmNote[]
-  coupons   CrmCoupon[]
-
-  @@map("crm_clients")
-}
-
-model CrmDeal {
-  id             String         @id @default(uuid())
-  clientId       String
-  client         CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  sellerId       String?
-  seller         User?          @relation("SellerDeals", fields: [sellerId], references: [id])
-  title          String
-  expectedValue  Float          @default(0)
-  contractMonths Int            @default(1)
-  originalValue  Float          @default(0)
-  probability    Int            @default(0)
-  stage          DealStage      @default(NEW_LEAD)
-  status         DealStatus     @default(OPEN)
-  expectedDate   DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  items          CrmDealItem[]
-  messages       CrmMessage[]
-
-  @@map("crm_deals")
-}
-
-model CrmDealItem {
-  id            String   @id @default(uuid())
-  dealId        String
-  deal          CrmDeal  @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  panelId       String
-  panel         Panel    @relation(fields: [panelId], references: [id])
-  priceSnapshot Float    @default(0) 
-
-  @@map("crm_deal_items")
-}
-
-model CrmMessage {
-  id         String         @id @default(uuid())
-  dealId     String?        
-  deal       CrmDeal?       @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  clientId   String
-  client     CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  senderId   String         
-  content    String?
-  mediaUrl   String?
-  mediaType  String?
-  isRead     Boolean        @default(false)
-  isInternal Boolean        @default(false) 
-  createdAt  DateTime       @default(now())
-
-  @@map("crm_messages")
-}
-
-model CrmActivity {
-  id          String         @id @default(uuid())
-  clientId    String
-  client      CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  sellerId    String
-  seller      User           @relation("SellerActivities", fields: [sellerId], references: [id])
-  type        ActivityType
-  title       String
-  description String?
-  dueDate     DateTime
-  isCompleted Boolean        @default(false)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  @@map("crm_activities")
-}
-
-model CrmNote {
-  id        String         @id @default(uuid())
-  clientId  String
-  client    CrmClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  authorId  String
-  content   String
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-
-  @@map("crm_notes")
-}
-
-model CrmCoupon {
-  id           String        @id @default(uuid())
-  code         String        @unique
-  creatorId    String
-  creator      User          @relation("CouponCreator", fields: [creatorId], references: [id])
-  discountType DiscountType
-  value        Float
-  minValue     Float?
-  validUntil   DateTime?
-  singleUse    Boolean       @default(false)
-  isUsed       Boolean       @default(false)
-  usedById     String?
-  usedBy       CrmClient?    @relation(fields: [usedById], references: [id])
-  usedAt       DateTime?
-  createdAt    DateTime      @default(now())
-
-  @@map("crm_coupons")
-}
-
-model AgendaTask {
-  id        String   @id @default(uuid())
-  title     String
-  client    String
-  time      String   // Ex: "09:00"
-  date      DateTime // Data do compromisso
-  type      String   // "call", "meeting", "message", "task"
-  status    String   @default("pending") // "pending" ou "completed"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("agenda_tasks")
-}
-
-// ==========================================
-// ENUMS
+// 6. ENUMS (Domínios de Valor)
 // ==========================================
 
 enum Role {
@@ -283,6 +367,7 @@ enum Role {
   MANAGER
   COMERCIAL
   USER
+  COMPANY     
 }
 
 enum PanelStatus {

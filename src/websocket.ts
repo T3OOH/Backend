@@ -6,14 +6,18 @@ import { env } from './config/env';
 export let io: Server;
 
 export function initWebSocket(httpServer: HttpServer) {
-    const allowedOrigins = [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        env.FRONTEND_URL 
-    ].filter(Boolean) as string[];
-
+    // ========================================================
+    // CORS (DINÂMICO) SOCKET.IO
+    // ========================================================
     io = new Server(httpServer, {
-        cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true }
+        cors: { 
+            origin: function (requestOrigin, callback) {
+                // Permite a conexão de qualquer origem dinamicamente
+                callback(null, true);
+            }, 
+            methods: ['GET', 'POST'], 
+            credentials: true 
+        }
     });
 
     io.on('connection', (socket: Socket) => {
