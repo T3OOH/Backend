@@ -3,14 +3,17 @@ import { OrderStatus } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
 
-// Schema de validacao para a entrada de dados do pedido
+// Novo schema aceitando o carrinho (array de itens)
 const createOrderSchema = z.object({
     userId: z.string().uuid(),
-    panelId: z.string().uuid().optional(),
     totalValue: z.number().min(0),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     notes: z.string().optional(),
+    items: z.array(z.object({
+        panelId: z.string().uuid(),
+        priceSnapshot: z.number().min(0)
+    })).min(1, "O pedido deve ter pelo menos um painel.")
 });
 
 export const orderController = {
@@ -21,16 +24,22 @@ export const orderController = {
             const order = await prisma.order.create({
                 data: {
                     userId: data.userId,
-                    panelId: data.panelId,
                     totalValue: data.totalValue,
                     startDate: data.startDate ? new Date(data.startDate) : null,
                     endDate: data.endDate ? new Date(data.endDate) : null,
                     notes: data.notes,
                     status: OrderStatus.PENDING,
+                    // Aqui criamos os painéis vinculados ao pacote de uma só vez
+                    items: {
+                        create: data.items.map(item => ({
+                            panelId: item.panelId,
+                            priceSnapshot: item.priceSnapshot
+                        }))
+                    }
                 },
                 include: {
                     user: { select: { name: true, email: true } },
-                    panel: { select: { name: true, price: true } }
+                    items: { include: { panel: { select: { name: true, price: true } } } }
                 }
             });
 
@@ -49,8 +58,14 @@ export const orderController = {
             const orders = await prisma.order.findMany({
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    user: { select: { name: true, email: true } },
-                    panel: { select: { name: true, city: true, state: true } }
+                    user: { select: { name: true, email: true, phone: true, companyName: true } },
+                    seller: { select: { id: true, name: true } },
+                    // Agora buscamos os painéis através da relação "items"
+                    items: {
+                        include: {
+                            panel: { select: { id: true, name: true, city: true, state: true, images: true, price: true } }
+                        }
+                    }
                 }
             });
 
@@ -61,29 +76,32 @@ export const orderController = {
         }
     },
 
-    async updateStatus(req: Request<{ id: string }>, res: Response) {
+    async update(req: Request<{ id: string }>, res: Response) {
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, sellerId } = req.body;
 
-        // Validacao restrita para os status disponiveis no Enum
-        if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
+        if (status && !Object.values(OrderStatus).includes(status as OrderStatus)) {
             return res.status(400).json({ error: 'Status de pedido inválido.' });
         }
 
         try {
             const updatedOrder = await prisma.order.update({
                 where: { id: String(id) },
-                data: { status: status as OrderStatus },
+                data: {
+                    ...(status && { status: status as OrderStatus }),
+                    ...(sellerId !== undefined && { sellerId: sellerId }) 
+                },
                 include: {
                     user: { select: { name: true, email: true } },
-                    panel: { select: { name: true } }
+                    seller: { select: { id: true, name: true } },
+                    items: { include: { panel: { select: { name: true } } } }
                 }
             });
 
             return res.status(200).json(updatedOrder);
         } catch (error) {
-            console.error('Erro ao atualizar status do pedido:', error);
-            return res.status(500).json({ error: 'Erro interno ao atualizar status do pedido.' });
+            console.error('Erro ao atualizar o pedido:', error);
+            return res.status(500).json({ error: 'Erro interno ao atualizar o pedido.' });
         }
     }
 };

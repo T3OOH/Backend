@@ -49,6 +49,7 @@ model User {
   
   // Relacionamentos Inversos
   orders          Order[]
+  ordersSeller    Order[]       @relation("OrderSeller")
   crmClients      CrmClient[]   @relation("SellerClients")
   crmDeals        CrmDeal[]     @relation("SellerDeals")
   crmActivities   CrmActivity[] @relation("SellerActivities")
@@ -84,8 +85,8 @@ model Panel {
   
   category    Category?   @relation(fields: [categoryId], references: [id])
   analytics   AnalyticsEvent[]
-  orders      Order[]
   dealItems   CrmDealItem[]
+  orderItems  OrderItem[] // Relacionamento com os itens do pedido (Pacote)
 
   @@index([city, state])
   @@map("panels")
@@ -105,7 +106,7 @@ model Category {
 // 3. SALES & OPERATIONS
 // ==========================================
 
-/// Transações fechadas e ordens de veiculação (Gestão Operacional).
+/// Transações fechadas e ordens de veiculação (Gestão Operacional / Pacotes).
 model Order {
   id          String      @id @default(uuid())
   
@@ -115,9 +116,9 @@ model Order {
   companyId   String?
   company     Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  panelId     String?
-  panel       Panel?      @relation(fields: [panelId], references: [id], onDelete: SetNull)
-  
+  sellerId    String?
+  seller      User?       @relation("OrderSeller", fields: [sellerId], references: [id])
+
   status      OrderStatus @default(PENDING)
   totalValue  Float       @default(0)
   startDate   DateTime?
@@ -126,7 +127,21 @@ model Order {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  items       OrderItem[] // Agora o pedido é um pacote contendo vários painéis
+
   @@map("orders")
+}
+
+/// Pontos (Painéis) vinculados a um pedido fechado (Pacote).
+model OrderItem {
+  id            String  @id @default(uuid())
+  orderId       String
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  panelId       String
+  panel         Panel   @relation(fields: [panelId], references: [id])
+  priceSnapshot Float   @default(0) // Valor do painel no momento do pedido
+
+  @@map("order_items")
 }
 
 // ==========================================
@@ -206,7 +221,7 @@ model CrmDealItem {
 model CrmMessage {
   id          String     @id @default(uuid())
   
-  dealId      String?   
+  dealId      String?    
   deal        CrmDeal?   @relation(fields: [dealId], references: [id], onDelete: Cascade)
   
   clientId    String
@@ -306,6 +321,19 @@ model Banner {
   updatedAt DateTime @updatedAt
 
   @@map("banners")
+}
+
+/// Imagens de Portfólio da página T3 Solution
+model SolutionPortfolio {
+  id        String   @id @default(uuid())
+  url       String
+  alt       String
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("solution_portfolio")
 }
 
 /// Formulário de contato público do site.

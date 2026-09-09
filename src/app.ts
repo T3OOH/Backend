@@ -18,7 +18,8 @@ import { chatRoutes } from './routes/chat.routes';
 import { agendaRoutes } from './routes/agenda.routes';
 import { couponRoutes } from './routes/coupon.routes';
 import { profileRoutes } from './routes/profile.routes';
-import { bannerRoutes } from './routes/banner.routes'; // <-- IMPORTAÇÃO ADICIONADA
+import { bannerRoutes } from './routes/banner.routes';
+import { solutionRoutes } from './routes/solution.routes'; 
 
 /**
  * Instância principal da aplicação Express.
@@ -108,7 +109,8 @@ app.use('/auth/login', loginLimiter);
 app.use('/auth', authRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
-app.use('/banners', bannerRoutes); // <-- ROTA REGISTRADA AQUI
+app.use('/banners', bannerRoutes); 
+app.use('/solution', solutionRoutes); // <-- NOVA ROTA REGISTRADA AQUI
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
 app.use('/orders', orderRoutes);

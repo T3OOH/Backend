@@ -6,6 +6,8 @@ const orderRoutes = Router();
 // Mapeamento das rotas de pedidos
 orderRoutes.post('/', orderController.create);
 orderRoutes.get('/', orderController.index);
-orderRoutes.patch('/:id/status', orderController.updateStatus);
+
+// Rota corrigida: apontando para 'update' e usando apenas '/:id'
+orderRoutes.patch('/:id', orderController.update);
 
 export { orderRoutes };
