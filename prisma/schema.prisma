@@ -92,6 +92,15 @@ model Panel {
   @@map("panels")
 }
 
+model Institutional {
+  id        String   @id @default("global") // Usamos um ID fixo para ter apenas um registro
+  team      Json     @default("[]")
+  brands    Json     @default("[]")
+  updatedAt DateTime @updatedAt
+
+  @@map("institutional")
+}
+
 /// Categorização do Inventário (Outdoor, Indoor, Totem, etc).
 model Category {
   id          String   @id @default(uuid())

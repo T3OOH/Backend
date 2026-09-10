@@ -19,24 +19,24 @@ import { agendaRoutes } from './routes/agenda.routes';
 import { couponRoutes } from './routes/coupon.routes';
 import { profileRoutes } from './routes/profile.routes';
 import { bannerRoutes } from './routes/banner.routes';
-import { solutionRoutes } from './routes/solution.routes'; 
+import { solutionRoutes } from './routes/solution.routes';
+import { institutionalRoutes } from './routes/institutional.routes';
 
 /**
- * Instância principal da aplicação Express.
+ * Main Express application instance.
  */
 const app: Application = express();
 
 /**
- * Configuração de proxy reverso.
- * Necessário para que o rate limiter confie no IP original caso a API esteja
- * hospedada atrás de balanceadores de carga como Vercel, Heroku ou Nginx.
+ * Trust proxy configuration.
+ * Required for correct IP resolution when application runs behind reverse proxies (e.g., Vercel, Nginx).
  */
 app.set('trust proxy', 1);
 
 /**
- * Configurações de Segurança: Helmet unificado.
- * O Helmet define cabeçalhos HTTP focados em segurança. A política de CSP 
- * foi ajustada para permitir frames e origens cruzadas do localhost e URL de produção.
+ * Security Middleware (Helmet).
+ * Configures HTTP response headers. CSP is adjusted to allow framing and cross-origin requests
+ * from configured frontend origins.
  */
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -50,11 +50,8 @@ app.use(helmet({
 app.disable('x-powered-by');
 
 /**
- * ========================================================
- * CORS "À PROVA DE BALAS" (DINÂMICO)
- * ========================================================
- * Removemos a lista fixa para evitar bloqueios de www ou 
- * cache. Esta função permite a passagem dinâmica.
+ * Cross-Origin Resource Sharing (CORS) Configuration.
+ * Configured dynamically to accept requests from all origins.
  */
 app.use(cors({
     origin: function (origin, callback) {
@@ -66,21 +63,20 @@ app.use(cors({
 }));
 
 /**
- * Configuração do Parser JSON.
+ * JSON Payload Parser.
+ * Configured with a 1MB limit for incoming request bodies.
  */
 app.use(express.json({ limit: '1mb' }));
 
 /**
- * Provedor de Arquivos Estáticos (Uploads).
- * Middleware reposicionado acima do roteador principal para garantir 
- * que as imagens carreguem antes de baterem na rota 404.
+ * Static File Serving.
+ * Exposes the local uploads directory.
  */
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 /**
- * Limitadores de Taxa (Rate Limit).
- * O limite geral da API foi dimensionado para acomodar aplicações React 
- * com comportamento de Polling sem disparar o status HTTP 429 precocemente.
+ * Rate Limiting Middleware.
+ * Global API rate limiter configured to accommodate standard client polling behaviors.
  */
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -88,19 +84,23 @@ const apiLimiter = rateLimit({
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: (req) => req.method === 'OPTIONS',
-    message: { error: 'Limite de requisições excedido. Tente novamente em alguns minutos.' }
+    message: { error: 'Rate limit exceeded. Please try again later.' }
 });
 
+/**
+ * Authentication Rate Limiter.
+ * Stricter configuration applied specifically to login endpoints to prevent brute-force attacks.
+ */
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error: 'Muitas tentativas de login. Tente novamente em alguns minutos.' },
+    message: { error: 'Too many login attempts. Please try again later.' },
 });
 
 /**
- * Registros de Rotas e Controladores.
+ * Route Registrations.
  */
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
@@ -110,7 +110,8 @@ app.use('/auth', authRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/banners', bannerRoutes); 
-app.use('/solution', solutionRoutes); // <-- NOVA ROTA REGISTRADA AQUI
+app.use('/solution', solutionRoutes);
+app.use('/institutional', institutionalRoutes); 
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
 app.use('/orders', orderRoutes);
@@ -121,19 +122,19 @@ app.use('/coupons', couponRoutes);
 app.use('/profile', profileRoutes);
 
 /**
- * Manipulador de Rotas Não Encontradas (404).
- * Funciona como um fallback quando nenhuma rota anterior é correspondida.
+ * 404 Fallback Handler.
+ * Intercepts requests that do not match any registered routes.
  */
-app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
+app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
 
 /**
- * Middleware de Tratamento de Erros Global.
- * Intercepta exceções lançadas nos controladores (ex: erros de validação Zod, Multer).
+ * Global Error Handling Middleware.
+ * Processes exceptions thrown during request execution, standardizing response formats for client consumption.
  */
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {
         return res.status(400).json({
-            error: 'Dados inválidos.',
+            error: 'Validation failed.',
             details: err.issues,
         });
     }
@@ -151,7 +152,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     }
 
     console.error(err);
-    return res.status(500).json({ error: 'Erro interno do servidor.' });
+    return res.status(500).json({ error: 'Internal server error.' });
 });
 
 export default app;
