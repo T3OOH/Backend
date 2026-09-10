@@ -35,15 +35,49 @@ app.set('trust proxy', 1);
 
 /**
  * Security Middleware (Helmet).
- * Configures HTTP response headers. CSP is adjusted to allow framing and cross-origin requests
- * from configured frontend origins.
+ * Configures HTTP response headers to protect against common web vulnerabilities.
+ * The Content Security Policy (CSP) is explicitly tailored to allow:
+ * 1. Vite's development server scripts and HMR WebSockets ('unsafe-inline', 'unsafe-eval').
+ * 2. External image loading from Supabase Storage and OpenStreetMap (Leaflet).
+ * 3. Cross-origin requests and framing from authorized domains.
  */
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "frame-ancestors": ["'self'", "http://localhost:3000", "http://localhost:5173", "https://t3ooh.com", "https://www.t3ooh.com", env.FRONTEND_URL].filter(Boolean) as string[],
+            "default-src": ["'self'"],
+            "script-src": [
+                "'self'", 
+                "'unsafe-inline'", 
+                "'unsafe-eval'", 
+                "http://localhost:3000", 
+                "http://localhost:5173"
+            ],
+            "connect-src": [
+                "'self'", 
+                "http://localhost:3000", 
+                "http://localhost:5173", 
+                "ws://localhost:3000", 
+                "ws://localhost:5173", 
+                "https://*.supabase.co"
+            ],
+            "img-src": [
+                "'self'", 
+                "data:", 
+                "blob:", 
+                "https://*.supabase.co", 
+                "https://*.openstreetmap.org", 
+                "https://unpkg.com"
+            ],
+            "frame-ancestors": [
+                "'self'", 
+                "http://localhost:3000", 
+                "http://localhost:5173", 
+                "https://t3ooh.com", 
+                "https://www.t3ooh.com", 
+                env.FRONTEND_URL
+            ].filter(Boolean) as string[],
         },
     },
 }));
