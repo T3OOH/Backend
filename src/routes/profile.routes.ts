@@ -9,6 +9,7 @@ profileRoutes.use(authMiddleware);
 
 profileRoutes.get('/', profileController.getProfile);
 profileRoutes.put('/', profileController.updateProfile);
+profileRoutes.put('/preferences', profileController.updatePreferences);
 profileRoutes.get('/orders', profileController.getMyOrders);
 
 export { profileRoutes };

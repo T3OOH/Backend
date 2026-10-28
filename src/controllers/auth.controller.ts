@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
 import axios from 'axios';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
 
 import { prisma } from '../database/prisma';
 import { env } from '../config/env';
@@ -68,14 +69,22 @@ function toPublicUser(user: {
     name: string;
     email: string;
     role: Role;
+    preferences?: Prisma.JsonValue | null;
 }) {
     return {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
+        preferences: user.preferences ?? null,
     };
 }
+
+function signSession(user: { id: string; role: Role }) {
+    return jwt.sign({ role: user.role }, env.JWT_SECRET, { algorithm: 'HS256', subject: user.id, expiresIn: '1h' });
+}
+
+const googleClient = env.GOOGLE_CLIENT_ID ? new OAuth2Client(env.GOOGLE_CLIENT_ID) : null;
 
 /** Impressão digital curta do hash da senha, usada para invalidar links de reset já usados. */
 function passwordFingerprint(passwordHash: string) {
@@ -133,19 +142,80 @@ export const authController = {
             return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
 
-        const token = jwt.sign(
-            { role: user.role },
-            env.JWT_SECRET,
-            {
-                algorithm: 'HS256',
-                subject: user.id,
-                expiresIn: '1h',
-            },
-        );
-
         return res.json({
             user: toPublicUser(user),
-            token,
+            token: signSession(user),
+        });
+    },
+
+    // ==========================================
+    // LOGIN / CADASTRO COM GOOGLE
+    // ==========================================
+    async google(req: Request, res: Response) {
+        if (!googleClient || !env.GOOGLE_CLIENT_ID) {
+            return res.status(503).json({ error: 'O login com Google não está disponível no momento.' });
+        }
+
+        const credential = typeof req.body?.credential === 'string' ? req.body.credential : '';
+        if (!credential) {
+            return res.status(400).json({ error: 'Credencial do Google ausente.' });
+        }
+
+        // Confere assinatura, validade e se o token foi emitido para o nosso cliente OAuth
+        let payload;
+        try {
+            const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: env.GOOGLE_CLIENT_ID });
+            payload = ticket.getPayload();
+        } catch {
+            return res.status(401).json({ error: 'Não foi possível confirmar sua conta Google. Tente de novo.' });
+        }
+
+        if (!payload?.sub || !payload.email || !payload.email_verified) {
+            return res.status(401).json({ error: 'Sua conta Google precisa ter um e-mail verificado.' });
+        }
+
+        const email = payload.email.toLowerCase();
+        const name = (payload.name || email.split('@')[0]).trim().slice(0, 120);
+
+        // 1) conta já ligada ao Google; 2) conta existente com o mesmo e-mail (verificado pelo Google): liga;
+        // 3) nenhuma: cria uma conta de cliente
+        let user = await prisma.user.findUnique({ where: { googleId: payload.sub } });
+        let created = false;
+
+        if (!user) {
+            const byEmail = await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+            if (byEmail) {
+                user = await prisma.user.update({
+                    where: { id: byEmail.id },
+                    data: { googleId: payload.sub, isEmailVerified: true },
+                });
+            } else {
+                try {
+                    user = await prisma.user.create({
+                        data: {
+                            name,
+                            email,
+                            // Conta sem senha conhecida: a pessoa pode criar uma em "Esqueci minha senha"
+                            password: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
+                            googleId: payload.sub,
+                            isEmailVerified: true,
+                            role: Role.USER,
+                        },
+                    });
+                    created = true;
+                } catch (error) {
+                    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                        return res.status(409).json({ error: 'Este e-mail já está em uso. Entre com e-mail e senha.' });
+                    }
+                    throw error;
+                }
+            }
+        }
+
+        return res.status(created ? 201 : 200).json({
+            user: toPublicUser(user),
+            token: signSession(user),
+            created,
         });
     },
 

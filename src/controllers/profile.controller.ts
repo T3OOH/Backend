@@ -9,8 +9,27 @@ const profileSelect = {
     phone: true,
     companyName: true,
     role: true,
+    preferences: true,
+    googleId: true,
     createdAt: true,
 } as const;
+
+/** Personalização visual do site. Só valores conhecidos são guardados. */
+const preferencesSchema = z.object({
+    theme: z.enum(['dark', 'light']).optional(),
+    background: z.enum(['video', 'still']).optional(),
+    motion: z.enum(['full', 'reduced']).optional(),
+    textSize: z.enum(['default', 'large']).optional(),
+    avatarColor: z.enum(['orange', 'white', 'emerald', 'sky', 'rose']).optional(),
+    mapStyle: z.enum(['dark', 'light']).optional(),
+}).strict();
+
+/** O perfil não expõe o id do Google, só se a conta está ligada. */
+function toProfile<T extends { googleId?: string | null }>(user: T | null) {
+    if (!user) return user;
+    const { googleId, ...rest } = user;
+    return { ...rest, googleLinked: Boolean(googleId) };
+}
 
 const updateProfileSchema = z.object({
     name: z.string().trim().min(2).max(120).optional(),
@@ -27,7 +46,7 @@ export const profileController = {
                 where: { id: req.user!.id },
                 select: profileSelect
             });
-            return res.json(user);
+            return res.json(toProfile(user));
         } catch (error) {
             return res.status(500).json({ error: 'Erro ao buscar perfil' });
         }
@@ -47,10 +66,29 @@ export const profileController = {
                 select: profileSelect
             });
 
-            return res.json(user);
+            return res.json(toProfile(user));
         } catch (error) {
             return res.status(500).json({ error: 'Erro ao atualizar perfil' });
         }
+    },
+
+    async updatePreferences(req: Request, res: Response) {
+        const parsed = preferencesSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({ error: 'Preferências inválidas.', details: parsed.error.issues });
+        }
+
+        const current = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { preferences: true } });
+        const previous = current?.preferences && typeof current.preferences === 'object' && !Array.isArray(current.preferences)
+            ? current.preferences
+            : {};
+
+        const user = await prisma.user.update({
+            where: { id: req.user!.id },
+            data: { preferences: { ...previous, ...parsed.data } },
+            select: { preferences: true },
+        });
+        return res.json(user.preferences);
     },
 
     /**

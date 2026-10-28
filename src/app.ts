@@ -163,6 +163,7 @@ app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
 app.use(apiLimiter);
 app.use('/auth/login', loginLimiter);
+app.use('/auth/google', loginLimiter);
 app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
