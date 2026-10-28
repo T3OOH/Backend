@@ -10,7 +10,10 @@
     "start": "node dist/src/server.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
-    "admin:create": "tsx src/scripts/create-admin.ts"
+    "admin:create": "tsx src/scripts/create-admin.ts",
+    "db:check": "tsx src/scripts/check-connection.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:status": "prisma migrate status"
   },
   "keywords": [],
   "author": "",
