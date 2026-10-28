@@ -20,6 +20,18 @@ const createCouponSchema = z.object({
     { message: 'Desconto percentual deve ser no máximo 100%.', path: ['value'] },
 );
 
+/**
+ * "2026-12-31" (campo de data do formulário) vale até o fim desse dia em Brasília.
+ * Antes virava meia-noite UTC: o cupom aparecia com a data do dia anterior e
+ * expirava às 21h da véspera.
+ */
+function parseValidUntil(value?: string | null): Date | null {
+    if (!value) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T23:59:59.999-03:00`);
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // 1. Listar todos os cupons
 couponRoutes.get('/', async (req: Request, res: Response) => {
     try {
@@ -64,7 +76,7 @@ couponRoutes.post('/', async (req: Request, res: Response) => {
                 discountType,
                 value,
                 minValue: minValue === '' || minValue == null ? null : Number(minValue),
-                validUntil: validUntil ? new Date(validUntil) : null,
+                validUntil: parseValidUntil(validUntil),
                 singleUse: Boolean(singleUse),
                 creatorId: req.user!.id
             }

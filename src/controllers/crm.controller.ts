@@ -18,8 +18,8 @@ const createClientSchema = z.object({
 const createDealSchema = z.object({
     clientId: z.string().uuid(),
     title: z.string().min(3),
-    expectedValue: z.number().min(0),
-    probability: z.number().min(0).max(100).default(0),
+    expectedValue: z.coerce.number().min(0),
+    probability: z.coerce.number().int().min(0).max(100).default(0),
 });
 
 // Checkout do Frontend: apenas escolhas do cliente; valores são calculados no servidor
@@ -120,6 +120,9 @@ export const crmController = {
 
             return res.status(200).json(client);
         } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
+            }
             console.error('[CRM] UpdateClient Error:', error);
             return res.status(500).json({ error: 'Erro ao atualizar cliente.' });
         }
@@ -140,9 +143,11 @@ export const crmController = {
                 }
             }
 
-            await prisma.crmClient.delete({
-                where: { id: clientId }
-            });
+            // Cupons usados pelo cliente guardam a referência; sem soltá-la o delete falha (FK)
+            await prisma.$transaction([
+                prisma.crmCoupon.updateMany({ where: { usedById: clientId }, data: { usedById: null } }),
+                prisma.crmClient.delete({ where: { id: clientId } }),
+            ]);
 
             return res.status(204).send();
         } catch (error) {
@@ -153,8 +158,9 @@ export const crmController = {
 
     async getGlobalDeals(req: Request, res: Response) {
         try {
-            // Buscando todos os painéis dentro dos itens para o PDF no frontend ter os dados
+            // Fila: orçamentos do site que ainda não têm consultor
             const deals = await prisma.crmDeal.findMany({
+                where: { sellerId: null, status: 'OPEN' },
                 include: { 
                     client: { select: { name: true, email: true, phone: true, company: true } },
                     seller: { select: { name: true } },
@@ -185,15 +191,29 @@ export const crmController = {
             }
 
             if (deal.sellerId && deal.sellerId !== userId) {
-                return res.status(400).json({ error: 'Este pedido já está sendo atendido por outro consultor.' });
+                return res.status(409).json({ error: 'Este pedido já está sendo atendido por outro consultor.' });
             }
 
-            const updatedDeal = await prisma.crmDeal.update({
-                where: { id },
-                data: { sellerId: userId },
-                include: { seller: { select: { name: true } } }
+            const updatedDeal = await prisma.$transaction(async (tx) => {
+                // Atômico: só assume se ninguém assumiu entre a leitura e a escrita
+                const { count } = await tx.crmDeal.updateMany({
+                    where: { id, OR: [{ sellerId: null }, { sellerId: userId }] },
+                    data: { sellerId: userId },
+                });
+                if (count === 0) return null;
+
+                // Leads do site nascem com o cliente atrelado a um admin; quem assume passa a ser o dono
+                const client = await tx.crmClient.findUnique({ where: { id: deal.clientId }, select: { seller: { select: { role: true } } } });
+                if (client && client.seller.role !== Role.COMERCIAL) {
+                    await tx.crmClient.update({ where: { id: deal.clientId }, data: { sellerId: userId } });
+                }
+
+                return tx.crmDeal.findUnique({ where: { id }, include: { seller: { select: { name: true } } } });
             });
 
+            if (!updatedDeal) {
+                return res.status(409).json({ error: 'Este pedido acabou de ser assumido por outro consultor.' });
+            }
             return res.json(updatedDeal);
         } catch (error) {
             console.error('[CRM] ClaimDeal Error:', error);
@@ -209,7 +229,8 @@ export const crmController = {
             const deals = await prisma.crmDeal.findMany({
                 where: isRestricted ? { sellerId: userId } : undefined,
                 include: {
-                    client: { select: { name: true, avatarUrl: true, phone: true, whatsapp: true, email: true } },
+                    client: { select: { name: true, avatarUrl: true, phone: true, whatsapp: true, email: true, company: true, document: true } },
+                    seller: { select: { name: true } },
                     items: {
                         include: {
                             panel: { select: { name: true, city: true, state: true } }
