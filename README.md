@@ -48,6 +48,23 @@ npm run dev            # http://localhost:3333
 ADMIN_NAME="Seu Nome" ADMIN_EMAIL="voce@empresa.com" ADMIN_PASSWORD="senha-com-12+caracteres" npm run admin:create
 ```
 
+## Banco de dados (Supabase)
+
+- **Projeto:** `obpzodeqatopkhatqwmk` (região `sa-east-1`).
+- **Conexões:** copie as strings em *Connect → ORMs → Prisma* no dashboard do Supabase.
+  - `DATABASE_URL`: pooler em modo transaction (porta 6543), usado pela aplicação.
+  - `DIRECT_URL`: conexão de sessão (porta 5432), usada pelo Prisma Migrate.
+- **Segurança:** RLS ligado em todas as tabelas, sem políticas, então a API pública do Supabase não lê nada. O backend acessa como `postgres` (Prisma) e `service_role` (Storage), que ignoram RLS. **Não** use a chave `anon` para ler tabelas.
+- **Storage:** bucket público `panels`, limitado a 5 MB e aos tipos JPG, PNG, WebP, PDF e DOC/DOCX.
+- **Migrações:** `0_init` é a linha de base do schema existente. Toda mudança no `schema.prisma` vira uma migração nova:
+
+  ```bash
+  npx prisma migrate dev --name descricao-da-mudanca   # em desenvolvimento
+  npm run db:migrate                                   # em produção (prisma migrate deploy)
+  ```
+
+- **Diagnóstico:** `npm run db:check` testa o banco, o Storage, as migrações e as integrações.
+
 ## Scripts
 
 | Script | Descrição |
@@ -58,6 +75,9 @@ ADMIN_NAME="Seu Nome" ADMIN_EMAIL="voce@empresa.com" ADMIN_PASSWORD="senha-com-1
 | `npm run prisma:generate` | Gera o Prisma Client |
 | `npm run prisma:validate` | Valida o `schema.prisma` |
 | `npm run admin:create` | Cria um usuário `ADMIN` |
+| `npm run db:check` | Diagnóstico de banco, Storage e migrações |
+| `npm run db:migrate` | Aplica migrações pendentes (`prisma migrate deploy`) |
+| `npm run db:status` | Mostra o estado das migrações |
 
 ## Estrutura
 

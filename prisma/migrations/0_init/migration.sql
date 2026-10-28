@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "Role" AS ENUM ('ADMIN', 'MANAGER', 'COMERCIAL', 'USER', 'COMPANY');
 
@@ -77,6 +80,16 @@ CREATE TABLE "panels" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "panels_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "institutional" (
+    "id" TEXT NOT NULL DEFAULT 'global',
+    "team" JSONB NOT NULL DEFAULT '[]',
+    "brands" JSONB NOT NULL DEFAULT '[]',
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "institutional_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -255,6 +268,19 @@ CREATE TABLE "banners" (
 );
 
 -- CreateTable
+CREATE TABLE "solution_portfolio" (
+    "id" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "alt" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "solution_portfolio_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "contacts" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -387,3 +413,4 @@ ALTER TABLE "crm_coupons" ADD CONSTRAINT "crm_coupons_usedById_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_panelId_fkey" FOREIGN KEY ("panelId") REFERENCES "panels"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
