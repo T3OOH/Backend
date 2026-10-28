@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node dist/src/server.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
@@ -48,5 +49,8 @@
     "prisma": "^7.8.0",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }
