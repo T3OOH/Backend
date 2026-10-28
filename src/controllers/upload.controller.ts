@@ -3,6 +3,32 @@ import { randomUUID } from 'node:crypto';
 import { supabase } from '../database/supabase';
 import { env } from '../config/env';
 
+const EXTENSION_BY_MIME: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+};
+
+/**
+ * Normaliza a pasta de destino no bucket.
+ * Aceita até 3 segmentos alfanuméricos (ex.: "team", "Brands", "panels/<id>"); qualquer
+ * outra coisa (como "..", barras extras ou caracteres especiais) cai em "avulsos".
+ */
+function sanitizeFolder(raw: unknown) {
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof value !== 'string') return 'avulsos';
+
+    const segments = value.split('/').filter(Boolean);
+    const isValid = segments.length > 0
+        && segments.length <= 3
+        && segments.every((segment) => /^[A-Za-z0-9_-]{1,64}$/.test(segment));
+
+    return isValid ? segments.join('/') : 'avulsos';
+}
+
 export class UploadController {
     async uploadImage(req: Request, res: Response) {
         // 1. Verifica se o middleware capturou o arquivo
@@ -11,24 +37,15 @@ export class UploadController {
         }
 
         try {
-            // Se o arquivo não tiver buffer, é porque o multer tá salvando no disco e não na memória
-            if (!req.file.buffer) {
-                return res.status(500).json({ message: 'Erro de configuração do servidor: Multer deve usar memoryStorage.' });
-            }
-
             const fileBuffer = req.file.buffer;
             const mimeType = req.file.mimetype;
-            const extension = req.file.originalname.split('.').pop() || 'png';
-            
-            // 2. Pega o ID da pasta/painel enviado do frontend (via query params)
-            // Se não vier nenhum, joga numa pasta chamada 'avulsos'
-            const folderId = req.query.folderId || 'avulsos';
+            const extension = EXTENSION_BY_MIME[mimeType] ?? 'bin';
 
-            // 3. Monta o caminho organizado no bucket respeitando EXATAMENTE o folderId
-            // Sem forçar "panels/" no começo, para aceitar "team", "Brands" ou "panels/ID"
+            // 2. Pasta de destino informada pelo frontend (via query params), já sanitizada
+            const folderId = sanitizeFolder(req.query.folderId);
             const path = `${folderId}/${randomUUID()}.${extension}`;
 
-            // 4. Faz o upload do Buffer direto para o Supabase
+            // 3. Faz o upload do Buffer direto para o Supabase
             const { error } = await supabase.storage
                 .from(env.SUPABASE_BUCKET)
                 .upload(path, fileBuffer, {
@@ -40,12 +57,12 @@ export class UploadController {
                 throw new Error(`Falha no upload para o Supabase: ${error.message}`);
             }
 
-            // 5. Recupera a URL pública definitiva
+            // 4. Recupera a URL pública definitiva
             const { data } = supabase.storage
                 .from(env.SUPABASE_BUCKET)
                 .getPublicUrl(path);
 
-            // 6. Retorna a URL para o frontend salvar no banco de dados
+            // 5. Retorna a URL para o frontend salvar no banco de dados
             return res.status(200).json({ url: data.publicUrl });
 
         } catch (error: any) {

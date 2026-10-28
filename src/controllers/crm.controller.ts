@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import { DealStage, DealStatus, Role } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
+import { calculateQuote } from '../services/pricing.service';
 
 const createClientSchema = z.object({
     name: z.string().min(2),
@@ -20,25 +22,36 @@ const createDealSchema = z.object({
     probability: z.number().min(0).max(100).default(0),
 });
 
-// Atualizado para a nova estrutura de Checkout do Frontend
-interface CheckoutItem {
-    panelId: string;
-    priceSnapshot: number;
-}
+// Checkout do Frontend: apenas escolhas do cliente; valores são calculados no servidor
+const checkoutSchema = z.object({
+    clientDetails: z.object({
+        name: z.string().trim().min(2).max(120),
+        email: z.string().trim().toLowerCase().email(),
+        phone: z.string().trim().min(8).max(30),
+        company: z.string().trim().max(120).optional(),
+        message: z.string().max(5000).optional(),
+    }),
+    contractMonths: z.coerce.number().int().min(1).max(36),
+    couponCode: z.string().trim().max(50).optional().nullable(),
+    items: z.array(z.object({ panelId: z.string().uuid() })).min(1, 'O carrinho não pode estar vazio.'),
+    source: z.string().max(50).optional(),
+});
 
-interface CheckoutPayload {
-    clientDetails: {
-        name: string;
-        email: string;
-        phone: string;
-        company?: string;
-        message?: string;
-    };
-    contractMonths: number;
-    originalValue: number;
-    expectedValue: number;
-    items: CheckoutItem[];
-    source?: string;
+/**
+ * Consultores comerciais só podem operar negócios atribuídos a eles.
+ * Retorna false (já respondendo 403/404) quando o acesso não é permitido.
+ */
+async function ensureDealAccess(req: Request, res: Response, dealId: string) {
+    const deal = await prisma.crmDeal.findUnique({ where: { id: dealId }, select: { sellerId: true } });
+    if (!deal) {
+        res.status(404).json({ error: 'Negócio não encontrado.' });
+        return false;
+    }
+    if (req.user?.role === Role.COMERCIAL && deal.sellerId !== req.user.id) {
+        res.status(403).json({ error: 'Acesso negado. Você não gerencia este negócio.' });
+        return false;
+    }
+    return true;
 }
 
 export const crmController = {
@@ -196,7 +209,7 @@ export const crmController = {
             const deals = await prisma.crmDeal.findMany({
                 where: isRestricted ? { sellerId: userId } : undefined,
                 include: {
-                    client: { select: { name: true, avatarUrl: true } },
+                    client: { select: { name: true, avatarUrl: true, phone: true, whatsapp: true, email: true } },
                     items: {
                         include: {
                             panel: { select: { name: true, city: true, state: true } }
@@ -215,11 +228,16 @@ export const crmController = {
     async updateDealStatus(req: Request, res: Response) {
         try {
             const id = String(req.params.id);
-            const status = String(req.body.status);
+            const status = String(req.body.status) as DealStatus;
+
+            if (!Object.values(DealStatus).includes(status)) {
+                return res.status(400).json({ error: 'Status inválido.' });
+            }
+            if (!(await ensureDealAccess(req, res, id))) return;
 
             const deal = await prisma.crmDeal.update({
                 where: { id },
-                data: { status: status as any } 
+                data: { status }
             });
 
             return res.status(200).json(deal);
@@ -233,6 +251,13 @@ export const crmController = {
         try {
             const data = createDealSchema.parse(req.body);
             const sellerId = (req as any).user.id;
+
+            if (req.user?.role === Role.COMERCIAL) {
+                const ownsClient = await prisma.crmClient.findFirst({ where: { id: data.clientId, sellerId } });
+                if (!ownsClient) {
+                    return res.status(403).json({ error: 'Acesso negado. Você não gerencia este cliente.' });
+                }
+            }
 
             const deal = await prisma.crmDeal.create({
                 data: {
@@ -256,11 +281,16 @@ export const crmController = {
     async updateDealStage(req: Request, res: Response) {
         try {
             const id = String(req.params.id);
-            const stage = String(req.body.stage);
+            const stage = String(req.body.stage) as DealStage;
+
+            if (!Object.values(DealStage).includes(stage)) {
+                return res.status(400).json({ error: 'Etapa inválida.' });
+            }
+            if (!(await ensureDealAccess(req, res, id))) return;
 
             const deal = await prisma.crmDeal.update({
                 where: { id },
-                data: { stage: stage as any } 
+                data: { stage }
             });
 
             return res.status(200).json(deal);
@@ -316,13 +346,10 @@ export const crmController = {
     async getChatHistory(req: Request, res: Response) {
         try {
             const dealId = String(req.params.dealId);
-            const { role } = (req as any).user;
-            
+            if (!(await ensureDealAccess(req, res, dealId))) return;
+
             const messages = await prisma.crmMessage.findMany({
-                where: { 
-                    dealId,
-                    isInternal: role === 'USER' ? false : undefined 
-                },
+                where: { dealId },
                 orderBy: { createdAt: 'asc' }
             });
             
@@ -335,17 +362,22 @@ export const crmController = {
 
     // Nova Rota Refatorada (Cria Deal com Itens Estruturados e Mensagem Rica)
     async createCheckoutDeal(req: Request, res: Response) {
+        const parsed = checkoutSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({ error: 'Dados do pedido inválidos.', details: parsed.error.issues });
+        }
+        const { clientDetails, contractMonths, couponCode, items, source } = parsed.data;
+
+        // Valores oficiais: preço do banco + desconto de prazo + cupom (erros de cupom viram 400)
+        const quote = await calculateQuote({
+            panelIds: items.map((item) => item.panelId),
+            months: contractMonths,
+            couponCode,
+        });
+        const { originalValue, finalValue: expectedValue } = quote;
+        const origin = source?.startsWith('INTERACTIVE_MAP') ? 'Mapa' : 'Catálogo';
+
         try {
-            const { clientDetails, contractMonths, originalValue, expectedValue, items, source } = req.body as CheckoutPayload;
-
-            if (!clientDetails?.name || !clientDetails?.email || !clientDetails?.phone) {
-                return res.status(400).json({ error: 'Dados do cliente incompletos.' });
-            }
-
-            if (!items || items.length === 0) {
-                return res.status(400).json({ error: 'O carrinho não pode estar vazio.' });
-            }
-
             const deal = await prisma.$transaction(async (tx) => {
                 
                 const fallbackSeller = await tx.user.findFirst({
@@ -377,14 +409,14 @@ export const crmController = {
                 // Cria o Deal e já insere os itens ao mesmo tempo (Poder do Prisma)
                 const newDeal = await tx.crmDeal.create({
                     data: {
-                        title: `Cotação via ${source === 'INTERACTIVE_MAP' ? 'Mapa' : 'Catálogo'} - ${contractMonths} meses`,
+                        title: `Cotação via ${origin} - ${contractMonths} meses`,
                         clientId: client.id,
                         expectedValue: expectedValue,
                         originalValue: originalValue,
                         contractMonths: contractMonths,
                         probability: 0,
                         items: {
-                            create: items.map(item => ({
+                            create: quote.items.map(item => ({
                                 panelId: item.panelId,
                                 priceSnapshot: item.priceSnapshot
                             }))
@@ -400,6 +432,13 @@ export const crmController = {
                     }
                 });
 
+                if (quote.coupon?.singleUse) {
+                    await tx.crmCoupon.update({
+                        where: { id: quote.coupon.id },
+                        data: { isUsed: true, usedAt: new Date(), usedById: client.id },
+                    });
+                }
+
                 // ==============================================================
                 // CRIAÇÃO DA MENSAGEM AUTOMÁTICA RICA NO CHAT
                 // ==============================================================
@@ -409,18 +448,22 @@ export const crmController = {
                 const panelDetailsText = newDeal.items.map(item => {
                     const p = item.panel;
                     const location = p.city && p.state ? `(${String(p.city).toUpperCase()} - ${String(p.state).toUpperCase()})` : '';
-                    return `• ${location} ${p.name}: ${formatCurrency(item.priceSnapshot)}`;
+                    return `• ${location} ${p.name}: ${formatCurrency(item.priceSnapshot)}/mês`;
                 }).join('\n');
 
                 const economy = originalValue > expectedValue ? originalValue - expectedValue : 0;
-                const monthlyInvestment = expectedValue / contractMonths;
+                const discountLines = [
+                    quote.termDiscountPercent > 0 ? `Desconto de prazo: ${quote.termDiscountPercent * 100}%` : '',
+                    quote.coupon ? `Cupom aplicado: ${quote.coupon.code}` : '',
+                ].filter(Boolean).join('\n');
 
                 // Monta o texto bonitinho
-                const initialText = `NOVA SOLICITAÇÃO DE ORÇAMENTO via ${source === 'INTERACTIVE_MAP' ? 'Mapa' : 'Catálogo'}\n\n` +
+                const initialText = `NOVA SOLICITAÇÃO DE ORÇAMENTO via ${origin}\n\n` +
                     `Duração da Campanha: ${contractMonths} ${contractMonths === 1 ? 'mês' : 'meses'}\n` +
-                    `Investimento Mensal: ${formatCurrency(monthlyInvestment)}\n` +
+                    `Investimento Mensal: ${formatCurrency(quote.monthlyValue)}\n` +
                     `Valor Total do Contrato (${contractMonths}x): ${formatCurrency(expectedValue)}\n` +
-                    (economy > 0 ? `Economia aplicada no pacote: ${formatCurrency(economy)}*\n\n` : '\n') +
+                    (economy > 0 ? `Economia aplicada no pacote: ${formatCurrency(economy)}*\n` : '') +
+                    (discountLines ? `${discountLines}\n\n` : '\n') +
                     `PAINÉIS SELECIONADOS:\n${panelDetailsText}\n\n` +
                     `NOTAS DO CLIENTE:\n${clientDetails.message || 'Nenhuma observação inserida pelo cliente.'}`;
                 
@@ -437,11 +480,11 @@ export const crmController = {
                 return newDeal;
             });
 
-            return res.status(201).json(deal);
+            return res.status(201).json({ ...deal, quote });
 
         } catch (error: any) {
             console.error('[CRM] Checkout Integration Error:', error);
-            return res.status(500).json({ error: error.message || 'Internal server error.' });
+            return res.status(500).json({ error: 'Não foi possível registrar o orçamento. Tente novamente.' });
         }
     }
 };

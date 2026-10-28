@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { crmController } from '../controllers/crm.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 const crmRoutes = Router();
 
 // Public routes
 crmRoutes.post('/deals/checkout', crmController.createCheckoutDeal);
 
-// Authenticated scope
-crmRoutes.use(authMiddleware);
+// Authenticated scope (equipe interna apenas)
+crmRoutes.use(authMiddleware, requireRoles(...STAFF_ROLES));
 
 // Dashboard / Metrics
 crmRoutes.get('/metrics', crmController.getDashboardMetrics);
@@ -21,12 +21,11 @@ crmRoutes.delete('/clients/:id', crmController.deleteClient);
 
 // Deal Management
 crmRoutes.get('/deals', crmController.getDeals);
+crmRoutes.get('/deals/global', crmController.getGlobalDeals);
 crmRoutes.get('/deals/:dealId/messages', crmController.getChatHistory);
 crmRoutes.post('/deals', crmController.createDeal);
-crmRoutes.patch('/deals/:id/stage', crmController.updateDealStage);
-crmRoutes.get('/deals/global', crmController.getGlobalDeals);
 crmRoutes.post('/deals/:dealId/claim', crmController.claimDeal);
+crmRoutes.patch('/deals/:id/stage', crmController.updateDealStage);
 crmRoutes.patch('/deals/:id/status', crmController.updateDealStatus);
-crmRoutes.get('/deals/global', crmController.getGlobalDeals);
 
 export { crmRoutes };

@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../database/prisma';
+import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 export const agendaRoutes = Router();
+
+agendaRoutes.use(authMiddleware, requireRoles(...STAFF_ROLES));
 
 // Listar tarefas de um mês/dia específico
 agendaRoutes.get('/', async (req, res) => {

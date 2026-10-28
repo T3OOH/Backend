@@ -1,13 +1,17 @@
 import { Router } from 'express';
 import { orderController } from '../controllers/order.controller';
+import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 const orderRoutes = Router();
 
-// Mapeamento das rotas de pedidos
-orderRoutes.post('/', orderController.create);
-orderRoutes.get('/', orderController.index);
+orderRoutes.use(authMiddleware);
 
-// Rota corrigida: apontando para 'update' e usando apenas '/:id'
-orderRoutes.patch('/:id', orderController.update);
+// Qualquer usuário logado pode criar um pedido para si mesmo
+orderRoutes.post('/', orderController.create);
+
+// Listagem e atualização apenas pela equipe
+orderRoutes.get('/', requireRoles(...STAFF_ROLES), orderController.index);
+orderRoutes.get('/:id', requireRoles(...STAFF_ROLES), orderController.show);
+orderRoutes.patch('/:id', requireRoles(...STAFF_ROLES), orderController.update);
 
 export { orderRoutes };

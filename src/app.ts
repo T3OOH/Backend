@@ -6,7 +6,10 @@ import rateLimit from 'express-rate-limit';
 import { ZodError } from 'zod';
 import path from 'path';
 
-import { env } from './config/env';
+import { Prisma } from '@prisma/client';
+import { env, isAllowedOrigin } from './config/env';
+import { PricingError } from './services/pricing.service';
+import { pricingRoutes } from './routes/pricing.routes';
 import { authRoutes } from './routes/auth.routes';
 import { contactRoutes } from './routes/contact.routes';
 import { panelRoutes } from './routes/panel.routes';
@@ -85,11 +88,12 @@ app.disable('x-powered-by');
 
 /**
  * Cross-Origin Resource Sharing (CORS) Configuration.
- * Configured dynamically to accept requests from all origins.
+ * Only the official frontend origins are accepted (see config/env.ts → allowedOrigins).
  */
 app.use(cors({
     origin: function (origin, callback) {
-        callback(null, true); 
+        // Requests without Origin (curl, health checks, server-to-server) are allowed
+        callback(null, !origin || isAllowedOrigin(origin));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -153,6 +157,7 @@ app.use('/crm', crmRoutes);
 app.use('/chat', chatRoutes);
 app.use('/agenda', agendaRoutes);
 app.use('/coupons', couponRoutes);
+app.use('/pricing', pricingRoutes);
 app.use('/profile', profileRoutes);
 
 /**
@@ -183,6 +188,14 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
     if (err instanceof Error && err.message === 'Painel não encontrado.') {
         return res.status(404).json({ error: err.message });
+    }
+
+    if (err instanceof PricingError) {
+        return res.status(400).json({ error: err.message });
+    }
+
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        return res.status(404).json({ error: 'Registro não encontrado.' });
     }
 
     console.error(err);
