@@ -3,13 +3,16 @@ import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
-import axios from 'axios'; 
+import axios from 'axios';
+import { createHash } from 'node:crypto';
 
 import { prisma } from '../database/prisma';
 import { env } from '../config/env';
 import { loginSchema, registerSchema } from '../validators/auth.validator';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Cliente de e-mail criado apenas quando a chave existe (sem ela o servidor ainda sobe)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH System <onboarding@resend.dev>';
 
 function toPublicUser(user: {
     id: string;
@@ -25,6 +28,11 @@ function toPublicUser(user: {
     };
 }
 
+/** Impressão digital curta do hash da senha, usada para invalidar links de reset já usados. */
+function passwordFingerprint(passwordHash: string) {
+    return createHash('sha256').update(passwordHash).digest('hex').slice(0, 16);
+}
+
 // ==========================================
 // FUNÇÃO DE VALIDAÇÃO DO RECAPTCHA
 // ==========================================
@@ -38,10 +46,13 @@ async function verifyReCaptcha(token: string): Promise<boolean> {
     }
 
     try {
+        // Segredo enviado no corpo (form-urlencoded), nunca na URL
         const response = await axios.post(
-            `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${token}`
+            'https://www.google.com/recaptcha/api/siteverify',
+            new URLSearchParams({ secret: secretKey, response: String(token) }),
+            { timeout: 5000 }
         );
-        return response.data.success; 
+        return response.data.success === true;
     } catch (error) {
         console.error("Erro na comunicação com a API do reCAPTCHA:", error);
         return false;
@@ -93,7 +104,7 @@ export const authController = {
     // REGISTER COM RECAPTCHA
     // ==========================================
     async register(req: Request, res: Response) {
-        const { captchaToken, name, email, password } = req.body;
+        const { captchaToken, name, email, password, phone, document, personType, companyName } = req.body ?? {};
 
         if (!captchaToken) {
             return res.status(400).json({ error: 'Captcha obrigatório. Confirme que você não é um robô.' });
@@ -105,7 +116,7 @@ export const authController = {
         }
 
         // CORREÇÃO AQUI: Passamos um objeto limpo para o Zod
-        const validatedData = registerSchema.parse({ name, email, password });
+        const validatedData = registerSchema.parse({ name, email, password, phone, document, personType, companyName });
 
         try {
             const user = await prisma.user.create({
@@ -113,6 +124,11 @@ export const authController = {
                     name: validatedData.name,
                     email: validatedData.email,
                     password: await bcrypt.hash(validatedData.password, 12),
+                    phone: validatedData.phone || null,
+                    document: validatedData.document || null,
+                    personType: validatedData.personType ?? 'PF',
+                    companyName: validatedData.personType === 'PJ' ? validatedData.companyName || null : null,
+                    // O perfil é sempre definido pelo servidor, nunca pelo cliente
                     role: Role.USER,
                 },
             });
@@ -136,29 +152,36 @@ export const authController = {
     // ROTAS DE RECUPERAÇÃO DE SENHA (MANTIDAS)
     // ==========================================
     async forgotPassword(req: Request, res: Response) {
-        const { email } = req.body;
-        
+        const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+
         if (!email) {
             return res.status(400).json({ error: 'O e-mail é obrigatório.' });
         }
 
+        const genericResponse = { message: 'Se o e-mail estiver cadastrado, enviaremos o link de recuperação.' };
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user) {
-            return res.json({ message: 'Se o e-mail existir, o link foi enviado.' });
+            return res.json(genericResponse);
         }
 
+        // "pwd" amarra o token ao hash atual: depois que a senha muda, o link deixa de valer
         const resetToken = jwt.sign(
-            { id: user.id, purpose: 'reset-password' },
+            { id: user.id, purpose: 'reset-password', pwd: passwordFingerprint(user.password) },
             env.JWT_SECRET,
-            { expiresIn: '15m' }
+            { algorithm: 'HS256', expiresIn: '15m' }
         );
 
-        const resetLink = `http://localhost:5173/atualizar-senha?token=${resetToken}`;
+        const resetLink = `${env.FRONTEND_URL.replace(/\/$/, '')}/atualizar-senha?token=${encodeURIComponent(resetToken)}`;
 
         try {
+            if (!resend) {
+                console.error('AVISO: RESEND_API_KEY não configurada; e-mail de recuperação não enviado.');
+                return res.status(503).json({ error: 'Recuperação de senha indisponível no momento.' });
+            }
+
             await resend.emails.send({
-                from: 'T3 OOH System <onboarding@resend.dev>',
+                from: EMAIL_FROM,
                 to: user.email, 
                 subject: 'Recuperação de Senha - T3 OOH',
                 html: `
@@ -171,7 +194,7 @@ export const authController = {
                 `
             });
 
-            return res.json({ message: 'E-mail enviado com sucesso.' });
+            return res.json(genericResponse);
         } catch (error) {
             console.error('Erro Resend:', error);
             return res.status(500).json({ error: 'Erro ao disparar o e-mail.' });
@@ -179,17 +202,28 @@ export const authController = {
     },
 
     async resetPassword(req: Request, res: Response) {
-        const { token, password } = req.body;
+        const { token, password } = req.body ?? {};
 
         if (!token || !password) {
             return res.status(400).json({ error: 'Token e senha são obrigatórios.' });
         }
 
+        // Mesma política de senha do cadastro
+        const passwordCheck = registerSchema.shape.password.safeParse(password);
+        if (!passwordCheck.success) {
+            return res.status(400).json({ error: passwordCheck.error.issues[0]?.message ?? 'Senha inválida.' });
+        }
+
         try {
-            const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string, purpose: string };
+            const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as { id: string, purpose: string, pwd?: string };
 
             if (decoded.purpose !== 'reset-password') {
                 throw new Error('Token inválido.');
+            }
+
+            const current = await prisma.user.findUnique({ where: { id: decoded.id }, select: { password: true } });
+            if (!current || decoded.pwd !== passwordFingerprint(current.password)) {
+                throw new Error('Token já utilizado.');
             }
 
             const hashedPassword = await bcrypt.hash(password, 12);

@@ -45,3 +45,8 @@ export function requireRoles(...roles: Role[]) {
         return next();
     };
 }
+/** Perfis com acesso ao dashboard administrativo. */
+export const MANAGEMENT_ROLES: Role[] = [Role.ADMIN, Role.MANAGER];
+
+/** Perfis da equipe interna (dashboard + CRM). */
+export const STAFF_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.COMERCIAL];

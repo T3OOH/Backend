@@ -33,6 +33,18 @@ export const userController = {
             return res.status(400).json({ error: 'Nível de acesso inválido.' });
         }
 
+        // Apenas ADMIN pode conceder ou retirar o perfil ADMIN
+        if (req.user?.role !== Role.ADMIN) {
+            const target = await prisma.user.findUnique({ where: { id: String(id) }, select: { role: true } });
+            if (role === Role.ADMIN || target?.role === Role.ADMIN) {
+                return res.status(403).json({ error: 'Apenas administradores podem alterar o perfil ADMIN.' });
+            }
+        }
+
+        if (req.user?.id === String(id)) {
+            return res.status(400).json({ error: 'Você não pode alterar o seu próprio nível de acesso.' });
+        }
+
         try {
             const updatedUser = await prisma.user.update({
                 where: { id: String(id) },

@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../database/prisma'; 
+import { prisma } from '../database/prisma';
+import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 const chatRoutes = Router();
+
+chatRoutes.use(authMiddleware, requireRoles(...STAFF_ROLES));
 
 // 1. Buscar todos os contatos da barra lateral
 chatRoutes.get('/contacts', async (req: Request, res: Response) => {
