@@ -16,7 +16,7 @@ const createOrderSchema = z.object({
 });
 
 const orderInclude = {
-    user: { select: { name: true, email: true, phone: true, companyName: true } },
+    user: { select: { name: true, email: true, phone: true, companyName: true, document: true, company: { select: { corporateName: true } } } },
     seller: { select: { id: true, name: true } },
     items: {
         include: {
