@@ -138,12 +138,33 @@ const loginLimiter = rateLimit({
 });
 
 /**
+ * Recuperação de senha: limita pedidos de link (evita disparo de e-mails em massa
+ * para a caixa de alguém) e tentativas de redefinição.
+ */
+const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitos pedidos de recuperação. Aguarde alguns minutos e tente de novo.' },
+});
+const passwordUpdateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
+});
+
+/**
  * Route Registrations.
  */
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
 app.use(apiLimiter);
 app.use('/auth/login', loginLimiter);
+app.use('/auth/forgot-password', passwordResetLimiter);
+app.use('/auth/reset-password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
