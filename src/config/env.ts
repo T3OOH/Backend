@@ -14,7 +14,10 @@ const envSchema = z.object({
     DATABASE_URL: z.string().url(),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres.'),
 
-    FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+    // No servidor (Render define RENDER=true) o padrão é o site oficial: o link do e-mail de senha usa este endereço
+    FRONTEND_URL: z.string().url().default(
+        process.env.RENDER || process.env.NODE_ENV === 'production' ? 'https://t3ooh.com' : 'http://localhost:3000',
+    ),
     CORS_ORIGINS: z.string().optional(),
 
     SUPABASE_URL: z.string().url(),

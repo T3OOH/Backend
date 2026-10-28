@@ -12,14 +12,15 @@ import { loginSchema, registerSchema } from '../validators/auth.validator';
 
 // Cliente de e-mail criado apenas quando a chave existe (sem ela o servidor ainda sobe)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <onboarding@resend.dev>';
+// t3ooh.com está verificado no Resend: o remetente padrão já é do domínio
+const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3ooh.com>';
 
 /*
  * Avisos de configuração da recuperação de senha (aparecem no log ao subir o servidor).
  * O remetente de teste do Resend (onboarding@resend.dev) só entrega para o e-mail do dono
- * da conta Resend: em produção é preciso um domínio verificado em RESEND_FROM.
+ * da conta Resend: em produção o remetente precisa ser de um domínio verificado.
  */
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
     if (!process.env.RESEND_API_KEY) console.warn('[auth] RESEND_API_KEY ausente: a recuperação de senha não envia e-mails.');
     if (EMAIL_FROM.includes('resend.dev')) console.warn('[auth] RESEND_FROM não configurado: o remetente de teste só entrega para o dono da conta Resend.');
     if (/localhost|127\.0\.0\.1/.test(env.FRONTEND_URL)) console.warn('[auth] FRONTEND_URL aponta para localhost: o link do e-mail não abre para o cliente.');
