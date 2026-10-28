@@ -145,6 +145,14 @@ export const orderController = {
                 }
             }
 
+            // O responsável precisa ser alguém da equipe (id inexistente virava erro de FK / 500)
+            if (sellerId) {
+                const seller = await prisma.user.findUnique({ where: { id: sellerId }, select: { role: true } });
+                if (!seller || !([Role.ADMIN, Role.MANAGER, Role.COMERCIAL] as Role[]).includes(seller.role)) {
+                    return res.status(400).json({ error: 'O responsável precisa ser alguém da equipe comercial.' });
+                }
+            }
+
             const updatedOrder = await prisma.order.update({
                 where: { id: String(id) },
                 data: {

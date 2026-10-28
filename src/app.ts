@@ -198,6 +198,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
         return res.status(404).json({ error: 'Registro não encontrado.' });
     }
 
+    // FK restrita: o registro ainda é usado em outro lugar (ex.: painel presente em pedidos ou negócios)
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+        return res.status(409).json({ error: 'Este registro está ligado a pedidos ou negócios e não pode ser excluído. Mude a situação em vez de excluir.' });
+    }
+
     console.error(err);
     return res.status(500).json({ error: 'Internal server error.' });
 });
