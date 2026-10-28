@@ -44,6 +44,8 @@ model User {
 
   role            Role     @default(USER)
   isEmailVerified Boolean  @default(false)
+  googleId        String?  @unique // "sub" da conta Google ligada (login com Google)
+  preferences     Json?    // Personalização visual do site escolhida pelo usuário
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
