@@ -53,31 +53,67 @@ export const profileController = {
         }
     },
 
+    /**
+     * Orçamentos do cliente em um só formato:
+     * - do mapa (CrmDeal, ligado pelo e-mail do cliente);
+     * - do catálogo (Order, ligado ao usuário). Antes estes não apareciam no perfil.
+     */
     async getMyOrders(req: Request, res: Response) {
         try {
-            // O e-mail vem do banco: o token carrega apenas id e perfil
             const user = await prisma.user.findUnique({
                 where: { id: req.user!.id },
                 select: { email: true }
             });
 
-            if (!user?.email) {
-                return res.json([]);
-            }
+            const panelSelect = { select: { name: true, city: true, state: true, images: true } } as const;
+            const sellerSelect = { select: { name: true, phone: true } } as const;
 
-            // Busca os tickets de CRM (Orçamentos do Mapa) atrelados ao email deste usuário
-            const deals = await prisma.crmDeal.findMany({
-                where: {
-                    client: { email: { equals: user.email, mode: 'insensitive' } }
-                },
-                include: {
-                    items: { include: { panel: true } }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
+            const [deals, orders] = await Promise.all([
+                user?.email
+                    ? prisma.crmDeal.findMany({
+                        where: { client: { email: { equals: user.email, mode: 'insensitive' } } },
+                        include: { items: { include: { panel: panelSelect } }, seller: sellerSelect },
+                        orderBy: { createdAt: 'desc' }
+                    })
+                    : Promise.resolve([]),
+                prisma.order.findMany({
+                    where: { userId: req.user!.id },
+                    include: { items: { include: { panel: panelSelect } }, seller: sellerSelect },
+                    orderBy: { createdAt: 'desc' }
+                }),
+            ]);
 
-            return res.json(deals);
+            const DEAL_STATUS = { OPEN: 'IN_REVIEW', WON: 'APPROVED', LOST: 'CANCELLED' } as const;
+            const ORDER_STATUS = { PENDING: 'IN_REVIEW', APPROVED: 'PROPOSAL_SENT', COMPLETED: 'APPROVED', REJECTED: 'CANCELLED' } as const;
+            const monthsBetween = (a?: Date | null, b?: Date | null) =>
+                a && b ? Math.max(1, Math.round(Math.abs(b.getTime() - a.getTime()) / 86_400_000 / 30)) : 1;
+
+            const list = [
+                ...deals.map((d) => ({
+                    id: d.id,
+                    source: 'MAP' as const,
+                    createdAt: d.createdAt,
+                    status: DEAL_STATUS[d.status],
+                    total: d.expectedValue,
+                    months: d.contractMonths,
+                    seller: d.seller,
+                    items: d.items.map((i) => ({ id: i.id, priceSnapshot: i.priceSnapshot, panel: i.panel })),
+                })),
+                ...orders.map((o) => ({
+                    id: o.id,
+                    source: 'CATALOG' as const,
+                    createdAt: o.createdAt,
+                    status: ORDER_STATUS[o.status],
+                    total: o.totalValue,
+                    months: monthsBetween(o.startDate, o.endDate),
+                    seller: o.seller,
+                    items: o.items.map((i) => ({ id: i.id, priceSnapshot: i.priceSnapshot, panel: i.panel })),
+                })),
+            ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+            return res.json(list);
         } catch (error) {
+            console.error('[Profile] getMyOrders Error:', error);
             return res.status(500).json({ error: 'Erro ao buscar orçamentos' });
         }
     }
