@@ -2,20 +2,20 @@ import { Request, Response } from 'express';
 import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Resend } from 'resend';
 import axios from 'axios';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 
 import { prisma } from '../database/prisma';
 import { env } from '../config/env';
 import { loginSchema, registerSchema } from '../validators/auth.validator';
 import { readAttribution } from '../lib/attribution';
+import { EMAIL_FROM, mailEnabled, passwordChangedEmail, resetEmail, sendMail, sendMailInBackground } from '../services/mail.service';
+import {
+    ACCESS_TTL_SECONDS, SessionError, clearLoginFailures, clientIp, describeDevice, logSecurityEvent, loginLockedFor,
+    passwordFingerprint, pruneOldSessions, registerLoginFailure, revokeSession, revokeUserSessions, rotateSession, startSession,
+} from '../services/session.service';
 
-// Cliente de e-mail criado apenas quando a chave existe (sem ela o servidor ainda sobe)
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-// t3ooh.com está verificado no Resend: o remetente padrão já é do domínio
-const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3ooh.com>';
 
 /*
  * Avisos de configuração da recuperação de senha (aparecem no log ao subir o servidor).
@@ -23,47 +23,11 @@ const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3ooh.com>';
  * da conta Resend: em produção o remetente precisa ser de um domínio verificado.
  */
 if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-    if (!process.env.RESEND_API_KEY) console.warn('[auth] RESEND_API_KEY ausente: a recuperação de senha não envia e-mails.');
+    if (!mailEnabled) console.warn('[auth] RESEND_API_KEY ausente: recuperação de senha e alertas de segurança não enviam e-mails.');
     if (EMAIL_FROM.includes('resend.dev')) console.warn('[auth] RESEND_FROM não configurado: o remetente de teste só entrega para o dono da conta Resend.');
     if (/localhost|127\.0\.0\.1/.test(env.FRONTEND_URL)) console.warn('[auth] FRONTEND_URL aponta para localhost: o link do e-mail não abre para o cliente.');
 }
 
-/** E-mail de recuperação no padrão visual do site (tabelas e estilos inline para clientes de e-mail). */
-function resetEmail(name: string, link: string) {
-    const first = (name || '').trim().split(/\s+/)[0] || 'olá';
-    const html = `<!doctype html>
-<html lang="pt-BR"><body style="margin:0;padding:0;background:#0B0B0C;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0C;padding:32px 16px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#111113;border:1px solid #2A2A2E;">
-      <tr><td style="padding:28px 32px;border-bottom:1px solid #2A2A2E;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#ECECEE;">
-        t<span style="color:#FF5E00;">3</span> <span style="font-size:11px;letter-spacing:3px;color:#8E8E93;font-weight:normal;">OOH</span>
-      </td></tr>
-      <tr><td style="padding:32px;font-family:Arial,Helvetica,sans-serif;color:#B4B4B9;font-size:15px;line-height:1.6;">
-        <p style="margin:0 0 8px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#8E8E93;">Recuperação de senha</p>
-        <h1 style="margin:0 0 20px;font-size:26px;line-height:1.2;font-weight:normal;color:#ECECEE;text-transform:uppercase;">Crie uma nova senha</h1>
-        <p style="margin:0 0 24px;">${first.charAt(0).toUpperCase() + first.slice(1)}, recebemos um pedido para redefinir a senha da sua conta na T3 OOH. O link vale por <strong style="color:#ECECEE;">15 minutos</strong> e funciona uma única vez.</p>
-        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#FF5E00;">
-          <a href="${link}" style="display:inline-block;padding:14px 28px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0B0B0C;text-decoration:none;">Criar nova senha</a>
-        </td></tr></table>
-        <p style="margin:24px 0 0;font-size:13px;color:#8E8E93;">Se o botão não abrir, copie este endereço no navegador:<br><a href="${link}" style="color:#FF5E00;word-break:break-all;">${link}</a></p>
-        <p style="margin:24px 0 0;font-size:13px;color:#8E8E93;">Não pediu? Ignore este e-mail: sua senha continua a mesma.</p>
-      </td></tr>
-      <tr><td style="padding:20px 32px;border-top:1px solid #2A2A2E;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6E6E73;">T3 OOH · Mídia exterior em Goiânia e região</td></tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>`;
-    const text = `Recuperação de senha - T3 OOH
-
-Recebemos um pedido para redefinir a senha da sua conta.
-Abra o link abaixo para criar uma nova senha (vale por 15 minutos e funciona uma única vez):
-
-${link}
-
-Não pediu? Ignore este e-mail: sua senha continua a mesma.`;
-    return { html, text };
-}
 
 function toPublicUser(user: {
     id: string;
@@ -81,16 +45,30 @@ function toPublicUser(user: {
     };
 }
 
-function signSession(user: { id: string; role: Role }) {
-    return jwt.sign({ role: user.role }, env.JWT_SECRET, { algorithm: 'HS256', subject: user.id, expiresIn: '1h' });
+
+/** Resposta de login: token de acesso curto + refresh token da sessão do aparelho. */
+function sessionPayload(user: Parameters<typeof toPublicUser>[0], started: { accessToken: string; refreshToken: string; session: { persistent: boolean } }) {
+    return {
+        user: toPublicUser(user),
+        token: started.accessToken,
+        refreshToken: started.refreshToken,
+        expiresIn: ACCESS_TTL_SECONDS,
+        persistent: started.session.persistent,
+    };
 }
+
+const resetLinkFor = (user: { id: string; password: string }) => {
+    // "pwd" amarra o token ao hash atual: depois que a senha muda, o link deixa de valer
+    const token = jwt.sign(
+        { id: user.id, purpose: 'reset-password', pwd: passwordFingerprint(user.password) },
+        env.JWT_SECRET,
+        { algorithm: 'HS256', expiresIn: '15m' },
+    );
+    return { token, link: `${env.FRONTEND_URL.replace(/\/$/, '')}/atualizar-senha?token=${encodeURIComponent(token)}` };
+};
 
 const googleClient = env.GOOGLE_CLIENT_ID ? new OAuth2Client(env.GOOGLE_CLIENT_ID) : null;
 
-/** Impressão digital curta do hash da senha, usada para invalidar links de reset já usados. */
-function passwordFingerprint(passwordHash: string) {
-    return createHash('sha256').update(passwordHash).digest('hex').slice(0, 16);
-}
 
 // ==========================================
 // FUNÇÃO DE VALIDAÇÃO DO RECAPTCHA
@@ -123,7 +101,7 @@ export const authController = {
     // LOGIN COM RECAPTCHA
     // ==========================================
     async login(req: Request, res: Response) {
-        const { captchaToken, email, password } = req.body;
+        const { captchaToken, email, password, deviceId, remember } = req.body;
 
         if (!captchaToken) {
             return res.status(400).json({ error: 'Captcha obrigatório. Confirme que você não é um robô.' });
@@ -137,16 +115,26 @@ export const authController = {
         // CORREÇÃO AQUI: Passamos um objeto limpo apenas com o que o Zod espera, ignorando o captchaToken
         const validatedData = loginSchema.parse({ email, password });
 
+        const emailKey = validatedData.email.toLowerCase();
+
+        // Muitas senhas erradas na mesma conta: espera, mesmo trocando de IP
+        const lockedMinutes = loginLockedFor(emailKey);
+        if (lockedMinutes) {
+            return res.status(429).json({ error: `Muitas tentativas com senha errada. Tente de novo em ${lockedMinutes} min ou use "Esqueci minha senha".` });
+        }
+
         const user = await prisma.user.findUnique({ where: { email: validatedData.email } });
 
         if (!user || !(await bcrypt.compare(validatedData.password, user.password))) {
+            const locked = registerLoginFailure(emailKey);
+            if (user) await logSecurityEvent(locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', { userId: user.id, req });
             return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
 
-        return res.json({
-            user: toPublicUser(user),
-            token: signSession(user),
-        });
+        clearLoginFailures(emailKey);
+        pruneOldSessions();
+        const started = await startSession(user, req, { deviceId, remember, method: 'password' });
+        return res.json(sessionPayload(user, started));
     },
 
     // ==========================================
@@ -214,11 +202,8 @@ export const authController = {
             }
         }
 
-        return res.status(created ? 201 : 200).json({
-            user: toPublicUser(user),
-            token: signSession(user),
-            created,
-        });
+        const started = await startSession(user, req, { deviceId: req.body?.deviceId, remember: req.body?.remember, method: 'google' });
+        return res.status(created ? 201 : 200).json({ ...sessionPayload(user, started), created });
     },
 
     // ==========================================
@@ -287,31 +272,15 @@ export const authController = {
             return res.json(genericResponse);
         }
 
-        // "pwd" amarra o token ao hash atual: depois que a senha muda, o link deixa de valer
-        const resetToken = jwt.sign(
-            { id: user.id, purpose: 'reset-password', pwd: passwordFingerprint(user.password) },
-            env.JWT_SECRET,
-            { algorithm: 'HS256', expiresIn: '15m' }
-        );
-
-        const resetLink = `${env.FRONTEND_URL.replace(/\/$/, '')}/atualizar-senha?token=${encodeURIComponent(resetToken)}`;
+        const { link: resetLink } = resetLinkFor(user);
 
         try {
-            if (!resend) {
+            if (!mailEnabled) {
                 console.error('AVISO: RESEND_API_KEY não configurada; e-mail de recuperação não enviado.');
                 return res.status(503).json({ error: 'A recuperação por e-mail está indisponível no momento. Fale com o comercial pelo WhatsApp para recuperar o acesso.' });
             }
 
-            const { html, text } = resetEmail(user.name, resetLink);
-            const { error } = await resend.emails.send({
-                from: EMAIL_FROM,
-                to: user.email,
-                subject: 'Crie uma nova senha · T3 OOH',
-                html,
-                text,
-            });
-            // O SDK do Resend devolve o erro (domínio não verificado, chave inválida...) em vez de lançar
-            if (error) throw Object.assign(new Error(error.message), { resend: error });
+            await sendMail(user.email, 'Crie uma nova senha · T3 OOH', resetEmail(user.name, resetLink));
 
             return res.json(genericResponse);
         } catch (error) {
@@ -340,21 +309,89 @@ export const authController = {
                 throw new Error('Token inválido.');
             }
 
-            const current = await prisma.user.findUnique({ where: { id: decoded.id }, select: { password: true } });
+            const current = await prisma.user.findUnique({ where: { id: decoded.id }, select: { password: true, name: true, email: true } });
             if (!current || decoded.pwd !== passwordFingerprint(current.password)) {
                 throw new Error('Token já utilizado.');
             }
 
             const hashedPassword = await bcrypt.hash(password, 12);
 
-            await prisma.user.update({
+            const updated = await prisma.user.update({
                 where: { id: decoded.id },
                 data: { password: hashedPassword }
             });
+
+            // Senha nova: todos os aparelhos saem (quem pediu a troca entra de novo com a senha nova)
+            await revokeUserSessions(decoded.id, 'password-reset');
+            await logSecurityEvent('PASSWORD_RESET', { userId: decoded.id, req });
+            sendMailInBackground(current.email, 'Sua senha foi alterada · T3 OOH', passwordChangedEmail(current.name,
+                { when: new Date(), device: describeDevice(req.get('user-agent')).label, ip: clientIp(req) }, resetLinkFor(updated).link), 'senha alterada');
 
             return res.json({ message: 'Senha atualizada com sucesso.' });
         } catch (error) {
             return res.status(401).json({ error: 'O link de recuperação é inválido ou expirou.' });
         }
-    }
+    },
+
+    // ==========================================
+    // SESSÃO: RENOVAR, SAIR E "NÃO FUI EU"
+    // ==========================================
+    /** Troca o refresh token por um novo par. 409 = outra aba já renovou (o site relê o token). */
+    async refresh(req: Request, res: Response) {
+        try {
+            const result = await rotateSession(req.body?.refreshToken, req);
+            return res.json({
+                user: toPublicUser(result.user),
+                token: result.accessToken,
+                refreshToken: result.refreshToken,
+                expiresIn: ACCESS_TTL_SECONDS,
+                persistent: result.persistent,
+            });
+        } catch (error) {
+            if (error instanceof SessionError) {
+                return res.status(error.code === 'ROTATED' ? 409 : 401).json({ error: error.message, code: error.code });
+            }
+            throw error;
+        }
+    },
+
+    /** Encerra a sessão deste aparelho (pelo refresh token ou pelo token de acesso). */
+    async logout(req: Request, res: Response) {
+        const refresh = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '';
+        let sid = refresh.includes('.') ? refresh.split('.', 1)[0] : '';
+        let userId: string | null = null;
+        const [scheme, bearer] = req.headers.authorization?.split(' ') ?? [];
+        if (scheme === 'Bearer' && bearer) {
+            const payload = jwt.decode(bearer) as { sid?: string; sub?: string } | null;
+            sid ||= payload?.sid ?? '';
+            userId = payload?.sub ?? null;
+        }
+        if (sid) {
+            await revokeSession(sid, 'logout');
+            await logSecurityEvent('LOGOUT', { userId, req, sessionId: sid });
+        }
+        return res.status(204).end();
+    },
+
+    /**
+     * Link "Não fui eu" do e-mail de aparelho novo: encerra todos os aparelhos e devolve um
+     * token de redefinição para a pessoa criar a senha nova na hora.
+     */
+    async reportAccess(req: Request, res: Response) {
+        const token = typeof req.body?.token === 'string' ? req.body.token : '';
+        try {
+            const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as { sub?: string; purpose?: string; sid?: string; pwd?: string };
+            if (decoded.purpose !== 'report-access' || !decoded.sub) throw new Error('token');
+            const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+            // Senha já trocada depois do alerta: o link perde a validade
+            if (!user || decoded.pwd !== passwordFingerprint(user.password)) throw new Error('usado');
+
+            const closed = await revokeUserSessions(user.id, 'reported-not-me');
+            await logSecurityEvent('REPORTED_NOT_ME', { userId: user.id, req, sessionId: decoded.sid ?? null, detail: `${closed} sessões encerradas` });
+
+            return res.json({ resetToken: resetLinkFor(user).token, closedSessions: closed });
+        } catch {
+            return res.status(401).json({ error: 'Este link expirou ou já foi usado. Se ainda não reconhece o acesso, use "Esqueci minha senha".' });
+        }
+    },
 };

@@ -1,6 +1,25 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../database/prisma';
+import { registerSchema } from '../validators/auth.validator';
+import { passwordChangedEmail, sendMailInBackground, siteUrl } from '../services/mail.service';
+import { clientIp, describeDevice, logSecurityEvent, revokeSession, revokeUserSessions } from '../services/session.service';
+
+/** Eventos mostrados na "Atividade recente" (texto para o usuário). */
+const EVENT_LABEL: Record<string, string> = {
+    LOGIN_SUCCESS: 'Entrada na conta',
+    LOGIN_FAILED: 'Tentativa de entrada com senha errada',
+    LOGIN_LOCKED: 'Entrada bloqueada por muitas senhas erradas',
+    NEW_DEVICE: 'Entrada em aparelho novo (e-mail enviado)',
+    LOGOUT: 'Saída da conta',
+    SESSION_REVOKED: 'Aparelho desconectado',
+    SESSIONS_REVOKED_OTHERS: 'Outros aparelhos desconectados',
+    TOKEN_REUSE: 'Sessão encerrada por uso suspeito',
+    PASSWORD_CHANGED: 'Senha alterada no perfil',
+    PASSWORD_RESET: 'Senha redefinida por e-mail',
+    REPORTED_NOT_ME: '"Não fui eu": todos os aparelhos desconectados',
+};
 
 const profileSelect = {
     id: true,
@@ -154,5 +173,77 @@ export const profileController = {
             console.error('[Profile] getMyOrders Error:', error);
             return res.status(500).json({ error: 'Erro ao buscar orçamentos' });
         }
-    }
+    },
+
+    // ============================ SEGURANÇA ============================
+
+    /** Aparelhos conectados e atividade recente da conta. */
+    async getSecurity(req: Request, res: Response) {
+        const now = new Date();
+        const [sessions, events, user] = await Promise.all([
+            prisma.userSession.findMany({
+                where: { userId: req.user!.id, revokedAt: null, expiresAt: { gt: now }, absoluteExpiresAt: { gt: now } },
+                orderBy: { lastUsedAt: 'desc' },
+                select: { id: true, browser: true, os: true, deviceType: true, ip: true, method: true, persistent: true, createdAt: true, lastUsedAt: true },
+            }),
+            prisma.securityEvent.findMany({
+                where: { userId: req.user!.id },
+                orderBy: { createdAt: 'desc' },
+                take: 20,
+                select: { id: true, type: true, ip: true, userAgent: true, createdAt: true },
+            }),
+            prisma.user.findUnique({ where: { id: req.user!.id }, select: { googleId: true } }),
+        ]);
+        return res.json({
+            sessions: sessions.map((s) => ({ ...s, current: s.id === req.user!.sessionId })),
+            events: events.map((e) => ({ id: e.id, type: e.type, label: EVENT_LABEL[e.type] ?? e.type, ip: e.ip, device: describeDevice(e.userAgent ?? undefined).label, createdAt: e.createdAt })),
+            googleLinked: Boolean(user?.googleId),
+        });
+    },
+
+    /** Desconecta um aparelho da própria conta. */
+    async revokeSession(req: Request, res: Response) {
+        const id = String(req.params.id);
+        const session = await prisma.userSession.findFirst({ where: { id, userId: req.user!.id }, select: { id: true } });
+        if (!session) return res.status(404).json({ error: 'Aparelho não encontrado.' });
+        await revokeSession(id, 'user-revoked');
+        await logSecurityEvent('SESSION_REVOKED', { userId: req.user!.id, req, sessionId: id });
+        return res.status(204).end();
+    },
+
+    /** Desconecta todos os outros aparelhos (mantém este). */
+    async revokeOtherSessions(req: Request, res: Response) {
+        const closed = await revokeUserSessions(req.user!.id, 'user-revoked-others', req.user!.sessionId);
+        await logSecurityEvent('SESSIONS_REVOKED_OTHERS', { userId: req.user!.id, req, sessionId: req.user!.sessionId, detail: `${closed} sessões` });
+        return res.json({ closed });
+    },
+
+    /** Troca de senha com a senha atual. Os outros aparelhos saem e chega um e-mail de aviso. */
+    async changePassword(req: Request, res: Response) {
+        const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+        const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+        const check = registerSchema.shape.password.safeParse(newPassword);
+        if (!check.success) return res.status(400).json({ error: check.error.issues[0]?.message ?? 'Senha inválida.' });
+
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+        if (!user) return res.status(404).json({ error: 'Conta não encontrada.' });
+        if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+            await logSecurityEvent('LOGIN_FAILED', { userId: user.id, req, detail: 'senha atual errada na troca de senha' });
+            return res.status(400).json({ error: 'A senha atual não confere.' });
+        }
+        if (await bcrypt.compare(newPassword, user.password)) {
+            return res.status(400).json({ error: 'A nova senha precisa ser diferente da atual.' });
+        }
+
+        await prisma.user.update({ where: { id: user.id }, data: { password: await bcrypt.hash(newPassword, 12) } });
+        const closed = await revokeUserSessions(user.id, 'password-changed', req.user!.sessionId);
+        await logSecurityEvent('PASSWORD_CHANGED', { userId: user.id, req, sessionId: req.user!.sessionId, detail: `${closed} outras sessões encerradas` });
+
+        sendMailInBackground(user.email, 'Sua senha foi alterada · T3 OOH', passwordChangedEmail(user.name,
+            { when: new Date(), device: describeDevice(req.get('user-agent')).label, ip: clientIp(req) },
+            `${siteUrl()}/recuperar-senha`), 'senha alterada');
+
+        return res.json({ message: 'Senha alterada.', closedSessions: closed });
+    },
 };
+

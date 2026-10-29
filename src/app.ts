@@ -157,6 +157,15 @@ const passwordUpdateLimiter = rateLimit({
     message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
 
+/** Renovação de sessão: cada aba renova a cada ~15 min; o teto barra tentativas em massa. */
+const refreshLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitas renovações de sessão. Aguarde alguns minutos.' },
+});
+
 /** Visitas do site: generoso para navegação normal, barra disparos automáticos. */
 const analyticsLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -176,6 +185,9 @@ app.use('/auth/login', loginLimiter);
 app.use('/auth/google', loginLimiter);
 app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
+app.use('/auth/report-access', passwordUpdateLimiter);
+app.use('/auth/refresh', refreshLimiter);
+app.use('/profile/password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
 app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);

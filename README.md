@@ -101,12 +101,13 @@ prisma/
 
 ## Endpoints
 
-Autenticação via header `Authorization: Bearer <token>`.
+Autenticação via header `Authorization: Bearer <token>` (token de acesso de 15 min, renovado com o refresh token da sessão). Sessões, alerta de aparelho novo, "Não fui eu" e resposta a incidentes: **[docs/SEGURANCA.md](docs/SEGURANCA.md)**.
 
 | Recurso | Método e rota | Acesso |
 | --- | --- | --- |
 | Saúde | `GET /health` | público |
 | Auth | `POST /auth/register` · `POST /auth/login` | público (reCAPTCHA) |
+| | `POST /auth/google` · `POST /auth/refresh` · `POST /auth/logout` · `POST /auth/report-access` | público |
 | | `POST /auth/forgot-password` · `POST /auth/reset-password` | público |
 | Painéis | `GET /panels` · `GET /panels/markers` · `GET /panels/:id` | público |
 | | `POST /panels` · `PUT /panels/:id` · `DELETE /panels/:id` | ADMIN, MANAGER |
@@ -116,7 +117,9 @@ Autenticação via header `Authorization: Bearer <token>`.
 | | `GET /banners/all` · `POST /banners` · `DELETE /banners/:id` | autenticado |
 | Portfólio Solution | `GET /solution/portfolio` · `POST` · `DELETE /:id` | público / gestão |
 | Institucional | `GET /institutional` · `PUT /institutional` | público / autenticado |
-| Perfil | `GET /profile` · `PUT /profile` · `GET /profile/orders` | autenticado |
+| Perfil | `GET /profile` · `PUT /profile` · `GET /profile/orders` · `PUT /profile/preferences` | autenticado |
+| Segurança | `GET /profile/security` · `DELETE /profile/sessions/:id` · `POST /profile/sessions/revoke-others` · `PUT /profile/password` | autenticado |
+| Tráfego | `POST /analytics/events` / `GET /analytics/summary` | público / gestão |
 | Usuários | `GET /users` · `PATCH /users/:id/role` | gestão |
 | Pedidos | `GET /orders` · `POST /orders` · `PATCH /orders/:id` | gestão |
 | CRM | `POST /crm/deals/checkout` | público (checkout do mapa) |
