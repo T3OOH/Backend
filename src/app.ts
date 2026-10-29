@@ -25,6 +25,7 @@ import { bannerRoutes } from './routes/banner.routes';
 import { solutionRoutes } from './routes/solution.routes';
 import { institutionalRoutes } from './routes/institutional.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
+import { reportsRoutes } from './routes/reports.routes';
 
 /**
  * Main Express application instance.
@@ -192,6 +193,7 @@ app.use('/profile/password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
 app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
+app.use('/reports', reportsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/banners', bannerRoutes); 
