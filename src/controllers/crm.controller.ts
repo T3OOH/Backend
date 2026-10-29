@@ -18,14 +18,26 @@ const createClientSchema = z.object({
 });
 
 const createDealSchema = z.object({
-    clientId: z.string().uuid(),
+    // Cliente da carteira ou, sem cadastro, os dados para criar o cliente junto do negócio
+    clientId: z.string().uuid().optional(),
+    newClient: z.object({
+        name: z.string().trim().min(2).max(120),
+        company: z.string().trim().max(120).optional().nullable(),
+        phone: z.string().trim().max(30).optional().nullable(),
+        email: z.string().trim().toLowerCase().email().optional().nullable().or(z.literal('')),
+    }).optional(),
     title: z.string().min(3),
     expectedValue: z.coerce.number().min(0),
     probability: z.coerce.number().int().min(0).max(100).default(0),
     // T3 OOH (telões) ou T3 Solution (venda e instalação de painéis)
     line: z.enum(DEAL_LINES).default('OOH'),
     solution: solutionDetailsSchema.optional().nullable(),
-});
+    // Proposta formalizada: prazo, etapa e painéis com o valor mensal já negociado
+    contractMonths: z.coerce.number().int().min(1).max(36).optional(),
+    originalValue: z.coerce.number().min(0).optional(),
+    stage: z.nativeEnum(DealStage).optional(),
+    items: z.array(z.object({ panelId: z.string().uuid(), priceSnapshot: z.coerce.number().min(0) })).max(200).optional(),
+}).refine((d) => d.clientId || d.newClient, { message: 'Escolha um cliente da carteira ou informe o nome do cliente.', path: ['clientId'] });
 
 /** Edição de um negócio aberto: dados gerais e projeto da Solution. */
 const updateDealSchema = z.object({
@@ -296,24 +308,50 @@ export const crmController = {
             const data = createDealSchema.parse(req.body);
             const sellerId = (req as any).user.id;
 
-            if (req.user?.role === Role.COMERCIAL) {
+            if (data.clientId && req.user?.role === Role.COMERCIAL) {
                 const ownsClient = await prisma.crmClient.findFirst({ where: { id: data.clientId, sellerId } });
                 if (!ownsClient) {
                     return res.status(403).json({ error: 'Acesso negado. Você não gerencia este cliente.' });
                 }
             }
 
-            const { solution, ...rest } = data;
-            const deal = await prisma.crmDeal.create({
-                data: {
-                    ...rest,
-                    // Projeto só nos negócios da Solution
-                    solution: rest.line === 'SOLUTION' && solution ? solution : undefined,
-                    sellerId
-                },
-                include: {
-                    client: { select: { name: true } }
+            // Painéis da proposta precisam existir (o valor negociado vem da tela)
+            if (data.items?.length) {
+                const found = await prisma.panel.count({ where: { id: { in: data.items.map((i) => i.panelId) } } });
+                if (found !== new Set(data.items.map((i) => i.panelId)).size) {
+                    return res.status(400).json({ error: 'Um dos painéis da proposta não existe mais.' });
                 }
+            }
+
+            const { solution, newClient, clientId, items, ...rest } = data;
+            const deal = await prisma.$transaction(async (tx) => {
+                // Sem cadastro: o cliente nasce na carteira de quem formalizou a proposta
+                const client = clientId
+                    ? { id: clientId }
+                    : await tx.crmClient.create({
+                        data: {
+                            name: newClient!.name,
+                            company: newClient!.company || null,
+                            phone: newClient!.phone || null,
+                            whatsapp: newClient!.phone || null,
+                            email: newClient!.email || null,
+                            sellerId,
+                        },
+                    });
+
+                return tx.crmDeal.create({
+                    data: {
+                        ...rest,
+                        clientId: client.id,
+                        // Projeto só nos negócios da Solution
+                        solution: rest.line === 'SOLUTION' && solution ? solution : undefined,
+                        sellerId,
+                        items: items?.length ? { create: items.map((i) => ({ panelId: i.panelId, priceSnapshot: i.priceSnapshot })) } : undefined,
+                    },
+                    include: {
+                        client: { select: { name: true } }
+                    }
+                });
             });
 
             return res.status(201).json(deal);
