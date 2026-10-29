@@ -187,6 +187,7 @@ app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
 app.use('/auth/report-access', passwordUpdateLimiter);
 app.use('/auth/refresh', refreshLimiter);
+app.use('/crm/deals/solution', passwordResetLimiter);
 app.use('/profile/password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
 app.use('/analytics/events', analyticsLimiter);

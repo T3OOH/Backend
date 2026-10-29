@@ -218,6 +218,10 @@ model CrmDeal {
   stage          DealStage  @default(NEW_LEAD)
   status         DealStatus @default(OPEN)
   expectedDate   DateTime?
+  // Linha de negócio: "OOH" (mídia nos telões) ou "SOLUTION" (venda e instalação de painéis)
+  line           String     @default("OOH")
+  // Projeto da T3 Solution: aplicação, ambiente, medidas, pitch e serviços (ver lib/solution.ts)
+  solution       Json?
 
   attribution Json? // Origem do lead (UTM, referência, página de entrada)
   createdAt DateTime @default(now())
@@ -228,6 +232,7 @@ model CrmDeal {
 
   @@index([clientId])
   @@index([sellerId])
+  @@index([line])
   @@map("crm_deals")
 }
 
