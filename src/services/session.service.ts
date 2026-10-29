@@ -155,11 +155,12 @@ export async function rotateSession(refreshToken: unknown, req: Request) {
     if (session.expiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) throw new SessionError('EXPIRED', 'Sessão expirada.');
 
     const hash = sha256(secret);
-    if (hash !== session.refreshHash) {
-        // Outra aba acabou de renovar com o mesmo token: o cliente relê o token novo
-        if (hash === session.previousHash && session.rotatedAt && now - session.rotatedAt.getTime() < ROTATION_GRACE_MS) {
-            throw new SessionError('ROTATED', 'Sessão já renovada.');
-        }
+    const isCurrent = hash === session.refreshHash;
+    // Segredo anterior dentro da janela: outra aba renovou ao mesmo tempo, ou a resposta da última
+    // renovação se perdeu (navegação, rede, servidor lento) e o navegador ficou com o segredo antigo.
+    // Em vez de recusar (o que deixava o navegador preso em 409/401), renova de novo.
+    const isRecentPrevious = !isCurrent && hash === session.previousHash && Boolean(session.rotatedAt) && now - session.rotatedAt!.getTime() < ROTATION_GRACE_MS;
+    if (!isCurrent && !isRecentPrevious) {
         // Token antigo reaparecendo fora da janela: pode ter sido copiado. Encerra a sessão.
         await revokeSession(session.id, 'token-reuse');
         await logSecurityEvent('TOKEN_REUSE', { userId: session.userId, req, sessionId: session.id });
@@ -172,8 +173,11 @@ export async function rotateSession(refreshToken: unknown, req: Request) {
         where: { id: session.id },
         data: {
             refreshHash: sha256(next),
-            previousHash: hash,
-            rotatedAt: new Date(now),
+            // Pelo segredo atual: o atual vira o anterior e a janela recomeça.
+            // Pelo anterior: o último emitido (que outra aba pode ter) passa a ser o anterior,
+            // e a janela não é estendida (continua contando da renovação original).
+            previousHash: isCurrent ? hash : session.refreshHash,
+            rotatedAt: isCurrent ? new Date(now) : session.rotatedAt,
             lastUsedAt: new Date(now),
             ip: clientIp(req),
             expiresAt: new Date(Math.min(now + idle, session.absoluteExpiresAt.getTime())),
