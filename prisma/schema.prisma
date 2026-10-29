@@ -58,6 +58,8 @@ model User {
   crmActivities  CrmActivity[] @relation("SellerActivities")
   createdCoupons CrmCoupon[]   @relation("CouponCreator")
   crmNotes       CrmNote[]     @relation("NoteAuthor")
+  sessions       UserSession[]
+  securityEvents SecurityEvent[]
 
   @@index([companyId])
   @@map("users")
@@ -487,4 +489,52 @@ enum ActivityType {
 enum DiscountType {
   PERCENTAGE
   FIXED_VALUE
+}
+
+/// Sessão de login por aparelho. O refresh token nunca é guardado: só o hash SHA-256.
+/// Ver docs/SEGURANCA.md.
+model UserSession {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshHash       String
+  // Hash anterior, aceito por alguns segundos para abas que renovaram ao mesmo tempo
+  previousHash      String?
+  rotatedAt         DateTime?
+  // Id aleatório do navegador (localStorage); serve para reconhecer aparelhos já usados
+  deviceId          String?
+  persistent        Boolean   @default(true)
+  method            String    @default("password")
+  userAgent         String?
+  browser           String?
+  os                String?
+  deviceType        String?
+  ip                String?
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime  @default(now())
+  expiresAt         DateTime
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+  revokeReason      String?
+
+  @@index([userId])
+  @@index([userId, deviceId])
+  @@map("user_sessions")
+}
+
+/// Registro de segurança da conta (login, novo aparelho, senha, sessões encerradas).
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  sessionId String?
+  ip        String?
+  userAgent String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
 }
