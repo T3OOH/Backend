@@ -24,6 +24,7 @@ import { profileRoutes } from './routes/profile.routes';
 import { bannerRoutes } from './routes/banner.routes';
 import { solutionRoutes } from './routes/solution.routes';
 import { institutionalRoutes } from './routes/institutional.routes';
+import { analyticsRoutes } from './routes/analytics.routes';
 
 /**
  * Main Express application instance.
@@ -156,6 +157,15 @@ const passwordUpdateLimiter = rateLimit({
     message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
 
+/** Visitas do site: generoso para navegação normal, barra disparos automáticos. */
+const analyticsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Rate limit exceeded.' },
+});
+
 /**
  * Route Registrations.
  */
@@ -167,6 +177,8 @@ app.use('/auth/google', loginLimiter);
 app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
+app.use('/analytics/events', analyticsLimiter);
+app.use('/analytics', analyticsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/banners', bannerRoutes); 
