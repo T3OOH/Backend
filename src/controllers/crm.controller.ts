@@ -25,6 +25,7 @@ const createDealSchema = z.object({
         company: z.string().trim().max(120).optional().nullable(),
         phone: z.string().trim().max(30).optional().nullable(),
         email: z.string().trim().toLowerCase().email().optional().nullable().or(z.literal('')),
+        document: z.string().trim().max(30).optional().nullable(),
     }).optional(),
     title: z.string().min(3),
     expectedValue: z.coerce.number().min(0),
@@ -325,19 +326,39 @@ export const crmController = {
 
             const { solution, newClient, clientId, items, ...rest } = data;
             const deal = await prisma.$transaction(async (tx) => {
-                // Sem cadastro: o cliente nasce na carteira de quem formalizou a proposta
-                const client = clientId
-                    ? { id: clientId }
-                    : await tx.crmClient.create({
+                // Sem ficha no CRM (digitado na hora ou cliente cadastrado no site):
+                // reaproveita a ficha com o mesmo e-mail, se houver; senão cria na carteira de quem formalizou
+                let client: { id: string } | null = clientId ? { id: clientId } : null;
+                if (!client && newClient!.email) {
+                    const existing = await tx.crmClient.findFirst({
+                        where: { email: { equals: newClient!.email, mode: 'insensitive' } },
+                        include: { seller: { select: { name: true, role: true } } },
+                    });
+                    if (existing) {
+                        const ownedByOtherSeller = existing.sellerId !== sellerId && existing.seller.role === Role.COMERCIAL;
+                        if (ownedByOtherSeller && req.user?.role === Role.COMERCIAL) {
+                            throw Object.assign(new Error(`Este cliente já é atendido por ${existing.seller.name}.`), { status: 409 });
+                        }
+                        // Ficha que estava com a gestão (lead do site) passa para quem formalizou
+                        if (existing.seller.role !== Role.COMERCIAL && req.user?.role === Role.COMERCIAL) {
+                            await tx.crmClient.update({ where: { id: existing.id }, data: { sellerId } });
+                        }
+                        client = { id: existing.id };
+                    }
+                }
+                if (!client) {
+                    client = await tx.crmClient.create({
                         data: {
                             name: newClient!.name,
                             company: newClient!.company || null,
+                            document: newClient!.document || null,
                             phone: newClient!.phone || null,
                             whatsapp: newClient!.phone || null,
                             email: newClient!.email || null,
                             sellerId,
                         },
                     });
+                }
 
                 return tx.crmDeal.create({
                     data: {
@@ -359,6 +380,28 @@ export const crmController = {
             if (error instanceof z.ZodError) {
                 return res.status(400).json({ error: 'Validation failed.', details: error.issues });
             }
+            // Cliente já atendido por outro comercial
+            if ((error as any)?.status === 409) {
+                return res.status(409).json({ error: (error as Error).message });
+            }
+            return res.status(500).json({ error: 'Internal server error.' });
+        }
+    },
+
+    /** Pessoas cadastradas no site (role USER ou COMPANY), para montar propostas. */
+    async getSiteClients(_req: Request, res: Response) {
+        try {
+            const users = await prisma.user.findMany({
+                where: { role: { in: [Role.USER, Role.COMPANY] } },
+                select: {
+                    id: true, name: true, email: true, phone: true, document: true, companyName: true, role: true, createdAt: true,
+                    company: { select: { corporateName: true, tradeName: true } },
+                },
+                orderBy: { name: 'asc' },
+            });
+            return res.status(200).json(users);
+        } catch (error) {
+            console.error('[CRM] GetSiteClients Error:', error);
             return res.status(500).json({ error: 'Internal server error.' });
         }
     },

@@ -16,6 +16,7 @@ crmRoutes.get('/metrics', crmController.getDashboardMetrics);
 
 // Client Management
 crmRoutes.get('/clients', crmController.getClients);
+crmRoutes.get('/site-clients', crmController.getSiteClients);
 crmRoutes.post('/clients', crmController.createClient);
 crmRoutes.put('/clients/:id', crmController.updateClient);
 crmRoutes.delete('/clients/:id', crmController.deleteClient);
