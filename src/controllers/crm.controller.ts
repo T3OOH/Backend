@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../database/prisma';
 import { calculateQuote } from '../services/pricing.service';
 import { readAttribution } from '../lib/attribution';
+import { DEAL_LINES, SOLUTION_APPLICATIONS, solutionDetailsSchema } from '../lib/solution';
 
 const createClientSchema = z.object({
     name: z.string().min(2),
@@ -21,6 +22,27 @@ const createDealSchema = z.object({
     title: z.string().min(3),
     expectedValue: z.coerce.number().min(0),
     probability: z.coerce.number().int().min(0).max(100).default(0),
+    // T3 OOH (telões) ou T3 Solution (venda e instalação de painéis)
+    line: z.enum(DEAL_LINES).default('OOH'),
+    solution: solutionDetailsSchema.optional().nullable(),
+});
+
+/** Edição de um negócio aberto: dados gerais e projeto da Solution. */
+const updateDealSchema = z.object({
+    title: z.string().trim().min(3).max(200).optional(),
+    expectedValue: z.coerce.number().min(0).optional(),
+    probability: z.coerce.number().int().min(0).max(100).optional(),
+    solution: solutionDetailsSchema.optional().nullable(),
+}).strict();
+
+/** Formulário do site da T3 Solution: vira um negócio na fila do CRM. */
+const solutionLeadSchema = z.object({
+    name: z.string().trim().min(2).max(120),
+    email: z.string().trim().toLowerCase().email(),
+    phone: z.string().trim().min(8).max(30),
+    company: z.string().trim().max(120).optional().nullable(),
+    application: z.enum(SOLUTION_APPLICATIONS),
+    message: z.string().trim().max(3000).optional().nullable(),
 });
 
 // Checkout do Frontend: apenas escolhas do cliente; valores são calculados no servidor
@@ -281,9 +303,12 @@ export const crmController = {
                 }
             }
 
+            const { solution, ...rest } = data;
             const deal = await prisma.crmDeal.create({
                 data: {
-                    ...data,
+                    ...rest,
+                    // Projeto só nos negócios da Solution
+                    solution: rest.line === 'SOLUTION' && solution ? solution : undefined,
                     sellerId
                 },
                 include: {
@@ -352,11 +377,24 @@ export const crmController = {
 
             const totalWonValue = wonDeals.reduce((acc, deal) => acc + Number(deal.expectedValue), 0);
 
+            // Separado por linha de negócio (T3 OOH e T3 Solution)
+            const byLine = Object.fromEntries(DEAL_LINES.map((line) => {
+                const open = openDeals.filter((d) => d.line === line);
+                const won = wonDeals.filter((d) => d.line === line);
+                return [line, {
+                    activeDeals: open.length,
+                    expectedValue: open.reduce((acc, d) => acc + Number(d.expectedValue), 0),
+                    wonDeals: won.length,
+                    wonValue: won.reduce((acc, d) => acc + Number(d.expectedValue), 0),
+                }];
+            }));
+
             return res.status(200).json({
                 totalExpectedValue,
                 totalActiveDeals,
                 totalClients,
-                totalWonValue
+                totalWonValue,
+                byLine,
             });
 
         } catch (error) {
@@ -380,6 +418,71 @@ export const crmController = {
             console.error('[CRM] GetChatHistory Error:', error);
             return res.status(500).json({ error: 'Erro ao buscar mensagens do histórico.' });
         }
+    },
+
+    /**
+     * Formulário do site da T3 Solution: cria (ou reaproveita) o cliente e abre um negócio da
+     * linha Solution na fila, sem consultor, com a aplicação escolhida e a mensagem.
+     */
+    async createSolutionLead(req: Request, res: Response) {
+        const parsed = solutionLeadSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({ error: 'Confira os dados do formulário.', details: parsed.error.issues });
+        }
+        const lead = parsed.data;
+        const attribution = readAttribution(req.body?.attribution);
+
+        try {
+            const deal = await prisma.$transaction(async (tx) => {
+                // A ficha do cliente precisa de um dono; fica com a gestão até alguém assumir o negócio
+                const fallbackSeller = await tx.user.findFirst({ where: { role: { in: ['ADMIN', 'MANAGER'] } }, orderBy: { createdAt: 'asc' } });
+                if (!fallbackSeller) throw new Error('Nenhum administrador encontrado para atrelar a ficha.');
+
+                let client = await tx.crmClient.findFirst({ where: { email: { equals: lead.email, mode: 'insensitive' } } });
+                if (!client) {
+                    client = await tx.crmClient.create({
+                        data: { name: lead.name, email: lead.email, phone: lead.phone, whatsapp: lead.phone, company: lead.company || null, sellerId: fallbackSeller.id },
+                    });
+                }
+
+                return tx.crmDeal.create({
+                    data: {
+                        title: `T3 Solution · ${lead.application}${lead.company ? ` · ${lead.company}` : ''}`,
+                        clientId: client.id,
+                        line: 'SOLUTION',
+                        solution: { application: lead.application, notes: lead.message || null },
+                        expectedValue: 0,
+                        originalValue: 0,
+                        probability: 0,
+                        attribution,
+                    },
+                });
+            });
+            return res.status(201).json({ id: deal.id, message: 'Recebemos seu pedido. A equipe da T3 Solution vai falar com você.' });
+        } catch (error) {
+            console.error('[CRM] Lead T3 Solution:', error);
+            return res.status(500).json({ error: 'Não foi possível enviar agora. Tente de novo ou fale pelo WhatsApp.' });
+        }
+    },
+
+    /** Edita valor, probabilidade, título e o projeto da Solution de um negócio. */
+    async updateDeal(req: Request, res: Response) {
+        const id = String(req.params.id);
+        if (!(await ensureDealAccess(req, res, id))) return;
+        const parsed = updateDealSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.issues });
+        }
+        const current = await prisma.crmDeal.findUnique({ where: { id }, select: { line: true } });
+        const { solution, ...rest } = parsed.data;
+        if (solution && current?.line !== 'SOLUTION') {
+            return res.status(400).json({ error: 'Projeto da T3 Solution só em negócios da linha Solution.' });
+        }
+        const deal = await prisma.crmDeal.update({
+            where: { id },
+            data: { ...rest, ...(solution !== undefined ? { solution: solution ?? undefined } : {}) },
+        });
+        return res.json(deal);
     },
 
     // Nova Rota Refatorada (Cria Deal com Itens Estruturados e Mensagem Rica)

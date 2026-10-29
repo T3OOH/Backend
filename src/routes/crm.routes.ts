@@ -6,6 +6,7 @@ const crmRoutes = Router();
 
 // Public routes
 crmRoutes.post('/deals/checkout', crmController.createCheckoutDeal);
+crmRoutes.post('/deals/solution', crmController.createSolutionLead);
 
 // Authenticated scope (equipe interna apenas)
 crmRoutes.use(authMiddleware, requireRoles(...STAFF_ROLES));
@@ -27,5 +28,6 @@ crmRoutes.post('/deals', crmController.createDeal);
 crmRoutes.post('/deals/:dealId/claim', crmController.claimDeal);
 crmRoutes.patch('/deals/:id/stage', crmController.updateDealStage);
 crmRoutes.patch('/deals/:id/status', crmController.updateDealStatus);
+crmRoutes.patch('/deals/:id', crmController.updateDeal);
 
 export { crmRoutes };

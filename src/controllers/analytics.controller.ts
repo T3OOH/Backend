@@ -20,11 +20,12 @@ const eventSchema = z.object({
 });
 
 type Touch = { source?: string | null; medium?: string | null; campaign?: string | null; landingPage?: string | null; referrer?: string | null };
-type LeadKind = 'CONTACT' | 'QUOTE' | 'ORDER' | 'SIGNUP';
+type LeadKind = 'CONTACT' | 'QUOTE' | 'SOLUTION' | 'ORDER' | 'SIGNUP';
 
 const LEAD_LABEL: Record<LeadKind, string> = {
     CONTACT: 'Contato',
     QUOTE: 'Orçamento pelo mapa',
+    SOLUTION: 'Orçamento T3 Solution',
     ORDER: 'Pedido pelo catálogo',
     SIGNUP: 'Cadastro',
 };
@@ -112,7 +113,7 @@ export const analyticsController = {
             }),
             prisma.crmDeal.findMany({
                 where: { createdAt: { gte: since }, OR: [{ attribution: { not: Prisma.DbNull } }, { title: { startsWith: 'Cotação via' } }] },
-                select: { id: true, createdAt: true, attribution: true, expectedValue: true, client: { select: { name: true, email: true, company: true } } },
+                select: { id: true, createdAt: true, attribution: true, expectedValue: true, line: true, client: { select: { name: true, email: true, company: true } } },
             }),
             prisma.order.findMany({
                 where: { createdAt: { gte: since } },
@@ -126,7 +127,7 @@ export const analyticsController = {
 
         const leads = [
             ...contacts.map((c) => ({ id: c.id, kind: 'CONTACT' as LeadKind, name: c.name, email: c.email, company: c.company, createdAt: c.createdAt, value: null as number | null, attribution: asTouch(c.attribution) })),
-            ...quotes.map((d) => ({ id: d.id, kind: 'QUOTE' as LeadKind, name: d.client.name, email: d.client.email, company: d.client.company, createdAt: d.createdAt, value: d.expectedValue, attribution: asTouch(d.attribution) })),
+            ...quotes.map((d) => ({ id: d.id, kind: (d.line === 'SOLUTION' ? 'SOLUTION' : 'QUOTE') as LeadKind, name: d.client.name, email: d.client.email, company: d.client.company, createdAt: d.createdAt, value: d.expectedValue, attribution: asTouch(d.attribution) })),
             ...orders.map((o) => ({ id: o.id, kind: 'ORDER' as LeadKind, name: o.user.name, email: o.user.email, company: o.user.companyName, createdAt: o.createdAt, value: o.totalValue, attribution: asTouch(o.attribution) })),
             ...signups.map((u) => ({ id: u.id, kind: 'SIGNUP' as LeadKind, name: u.name, email: u.email, company: u.companyName, createdAt: u.createdAt, value: null, attribution: asTouch(u.attribution) })),
         ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
