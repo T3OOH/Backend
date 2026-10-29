@@ -11,7 +11,11 @@ const pool = new Pool({
     connectionString,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    // Mantém as conexões abertas entre visitas: abrir uma nova (TLS até o Supabase) custava segundos
+    keepAlive: true,
+    idleTimeoutMillis: 5 * 60_000,
+    connectionTimeoutMillis: 10_000,
 });
 
 const adapter = new PrismaPg(pool);

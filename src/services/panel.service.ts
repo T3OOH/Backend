@@ -1,6 +1,12 @@
 import { PanelStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PanelRepository } from '../repositories/panel.repository';
+import { memoryCache } from '../lib/memoryCache';
+
+// Lista e mapa são públicos e mudam pouco: respondem da memória e renovam a cada minuto.
+// Qualquer alteração de painel limpa o cache na hora.
+const PANELS_CACHE = 'panels:';
+const PANELS_TTL_MS = 60_000;
 
 const firstQueryValue = (value: unknown) => Array.isArray(value) ? value[0] : value;
 const optionalQueryString = z.preprocess(
@@ -19,7 +25,9 @@ export class PanelService {
     private readonly repository = new PanelRepository();
 
     async createPanel(data: Prisma.PanelUncheckedCreateInput) {
-        return this.repository.create(data);
+        const panel = await this.repository.create(data);
+        memoryCache.invalidate(PANELS_CACHE);
+        return panel;
     }
 
     async getAllPanels(queryFilters: unknown) {
@@ -33,11 +41,11 @@ export class PanelService {
         if (query.status) filters.status = query.status;
         if (query.categoryId) filters.categoryId = query.categoryId;
 
-        return this.repository.findAll(filters);
+        return memoryCache.wrap(PANELS_CACHE + JSON.stringify(query), PANELS_TTL_MS, () => this.repository.findAll(filters));
     }
 
     async getMapMarkers() {
-        return this.repository.findForMap();
+        return memoryCache.wrap(PANELS_CACHE + 'map', PANELS_TTL_MS, () => this.repository.findForMap());
     }
 
     async getPanelById(id: string) {
@@ -48,11 +56,15 @@ export class PanelService {
 
     async updatePanel(id: string, data: Prisma.PanelUpdateInput) {
         await this.getPanelById(id);
-        return this.repository.update(id, data);
+        const panel = await this.repository.update(id, data);
+        memoryCache.invalidate(PANELS_CACHE);
+        return panel;
     }
 
     async deletePanel(id: string) {
         await this.getPanelById(id);
-        return this.repository.remove(id);
+        const removed = await this.repository.remove(id);
+        memoryCache.invalidate(PANELS_CACHE);
+        return removed;
     }
 }
