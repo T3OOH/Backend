@@ -46,6 +46,7 @@ model User {
   isEmailVerified Boolean  @default(false)
   googleId        String?  @unique // "sub" da conta Google ligada (login com Google)
   preferences     Json?    // Personalização visual do site escolhida pelo usuário
+  attribution Json? // Origem do lead (UTM, referência, página de entrada)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -137,6 +138,7 @@ model Order {
   startDate  DateTime?
   endDate    DateTime?
   notes      String?     @db.Text
+  attribution Json? // Origem do lead (UTM, referência, página de entrada)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -215,6 +217,7 @@ model CrmDeal {
   status         DealStatus @default(OPEN)
   expectedDate   DateTime?
 
+  attribution Json? // Origem do lead (UTM, referência, página de entrada)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -379,6 +382,7 @@ model Contact {
   userAgent String?
   origin    String?
   status    ContactStatus @default(PENDING)
+  attribution Json? // Origem do lead (UTM, referência, página de entrada)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -411,9 +415,16 @@ model AnalyticsEvent {
   country     String?
   city        String?
   referer     String?
+  // Visita anônima (id aleatório por aba) e a origem dela; o IP não é guardado
+  sessionId   String?
+  source      String?
+  medium      String?
+  campaign    String?
+  landingPage String?
   createdAt   DateTime @default(now())
 
   @@index([eventType, createdAt])
+  @@index([createdAt])
   @@index([panelId])
   @@map("analytics_events")
 }

@@ -3,6 +3,7 @@ import { DealStage, DealStatus, Role } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
 import { calculateQuote } from '../services/pricing.service';
+import { readAttribution } from '../lib/attribution';
 
 const createClientSchema = z.object({
     name: z.string().min(2),
@@ -388,6 +389,7 @@ export const crmController = {
             return res.status(400).json({ error: 'Dados do pedido inválidos.', details: parsed.error.issues });
         }
         const { clientDetails, contractMonths, couponCode, items, source } = parsed.data;
+        const attribution = readAttribution(req.body?.attribution);
 
         // Valores oficiais: preço do banco + desconto de prazo + cupom (erros de cupom viram 400)
         const quote = await calculateQuote({
@@ -436,6 +438,7 @@ export const crmController = {
                         originalValue: originalValue,
                         contractMonths: contractMonths,
                         probability: 0,
+                        attribution,
                         items: {
                             create: quote.items.map(item => ({
                                 panelId: item.panelId,

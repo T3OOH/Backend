@@ -10,6 +10,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../database/prisma';
 import { env } from '../config/env';
 import { loginSchema, registerSchema } from '../validators/auth.validator';
+import { readAttribution } from '../lib/attribution';
 
 // Cliente de e-mail criado apenas quando a chave existe (sem ela o servidor ainda sobe)
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -200,6 +201,7 @@ export const authController = {
                             googleId: payload.sub,
                             isEmailVerified: true,
                             role: Role.USER,
+                            attribution: readAttribution(req.body?.attribution),
                         },
                     });
                     created = true;
@@ -249,6 +251,7 @@ export const authController = {
                     companyName: validatedData.personType === 'PJ' ? validatedData.companyName || null : null,
                     // O perfil é sempre definido pelo servidor, nunca pelo cliente
                     role: Role.USER,
+                    attribution: readAttribution(req.body?.attribution),
                 },
             });
 

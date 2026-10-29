@@ -3,6 +3,7 @@ import { OrderStatus, Role } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
 import { calculateQuote } from '../services/pricing.service';
+import { readAttribution } from '../lib/attribution';
 
 // O carrinho envia apenas o que o cliente escolheu; valores são calculados no servidor
 const createOrderSchema = z.object({
@@ -48,6 +49,7 @@ export const orderController = {
                         endDate,
                         notes: data.notes,
                         status: OrderStatus.PENDING,
+                        attribution: readAttribution(req.body?.attribution),
                         // Aqui criamos os painéis vinculados ao pacote de uma só vez
                         items: {
                             create: quote.items.map(item => ({

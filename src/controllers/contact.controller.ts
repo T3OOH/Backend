@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
 import { prisma } from '../database/prisma';
 import { contactSchema } from '../validators/contact.validator';
+import { splitAttribution } from '../lib/attribution';
 
 export const contactController = {
     async create(req: Request, res: Response) {
-        const data = contactSchema.parse(req.body);
+        // A origem do lead vem à parte: o validador do contato recusa campos desconhecidos
+        const { attribution, body } = splitAttribution(req.body);
+        const data = contactSchema.parse(body);
 
         const contact = await prisma.contact.create({
             data: {
@@ -12,6 +15,7 @@ export const contactController = {
                 ip: req.ip,
                 userAgent: req.get('user-agent') ?? undefined,
                 origin: 'Página de contato',
+                attribution,
             },
         });
 
