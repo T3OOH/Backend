@@ -12,6 +12,8 @@ const envSchema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3333),
 
     DATABASE_URL: z.string().url(),
+    // Banco local sem SSL (desenvolvimento e testes); em produção fica ligado
+    DATABASE_SSL: z.enum(['true', 'false']).default('true'),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres.'),
 
     // No servidor (Render define RENDER=true) o padrão é o site oficial: o link do e-mail de senha usa este endereço
@@ -26,6 +28,11 @@ const envSchema = z.object({
     SUPABASE_URL: z.string().url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     SUPABASE_BUCKET: z.string().min(1).default('panels'),
+
+    // Opcional: token do GitHub só aumenta o limite de consultas do registro do repositório
+    GITHUB_TOKEN: z.string().optional(),
+    // Repositórios acompanhados no registro (dono/nome, separados por vírgula)
+    AUDIT_REPOSITORIES: z.string().default('T3OOH/Backend,T3OOH/Frontend'),
 });
 
 const result = envSchema.safeParse(source);

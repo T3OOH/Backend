@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { isSessionActive } from '../services/session.service';
+import { requestContext } from '../lib/requestContext';
 
 interface AccessTokenPayload extends JwtPayload {
     role?: Role;
@@ -46,6 +47,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         }
 
         req.user = { id: payload.sub, role: payload.role, sessionId: payload.sid };
+        // Autor das alterações desta requisição no registro de auditoria
+        requestContext.setActor({ id: payload.sub, role: payload.role });
         return next();
     }
 }
