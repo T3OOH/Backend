@@ -26,6 +26,9 @@ import { solutionRoutes } from './routes/solution.routes';
 import { institutionalRoutes } from './routes/institutional.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { reportsRoutes } from './routes/reports.routes';
+import { auditRoutes } from './routes/audit.routes';
+import { requestContext } from './lib/requestContext';
+import { recordRequestError } from './services/audit.service';
 
 /**
  * Main Express application instance.
@@ -37,6 +40,19 @@ const app: Application = express();
  * Required for correct IP resolution when application runs behind reverse proxies (e.g., Vercel, Nginx).
  */
 app.set('trust proxy', 1);
+
+/**
+ * Contexto da requisição (id, rota, IP e autor) para o registro de auditoria.
+ * Toda resposta 5xx vira um registro de erro com o que foi capturado durante a requisição.
+ */
+app.use(requestContext.middleware);
+app.use((_req, res, next) => {
+    const ctx = requestContext.get();
+    res.on('finish', () => {
+        if (res.statusCode >= 500 && ctx) requestContext.run(ctx, () => recordRequestError(res.statusCode));
+    });
+    next();
+});
 
 /**
  * Security Middleware (Helmet).
@@ -194,6 +210,7 @@ app.use('/auth', authRoutes);
 app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
 app.use('/reports', reportsRoutes);
+app.use('/audit', auditRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/banners', bannerRoutes); 

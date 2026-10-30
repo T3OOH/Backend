@@ -543,3 +543,36 @@ model SecurityEvent {
   @@index([type, createdAt])
   @@map("security_events")
 }
+
+/// Registro de auditoria: alterações feitas pelo sistema, direto no banco, no repositório e erros.
+model AuditLog {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  /// info | warning | error
+  level      String   @default("info")
+  /// api (sistema) | database (direto no banco) | repository (GitHub) | client (navegador)
+  source     String
+  /// create | update | delete | error | commit | merge...
+  action     String
+  entity     String?
+  entityId   String?
+  summary    String
+  changes    Json?
+  actorId    String?
+  actorName  String?
+  actorRole  String?
+  ip         String?
+  method     String?
+  path       String?
+  status     Int?
+  requestId  String?
+  /// Identificador externo (commit, PR) para não registrar duas vezes
+  externalId String?  @unique
+
+  @@index([createdAt])
+  @@index([level, createdAt])
+  @@index([source, createdAt])
+  @@index([entity, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
