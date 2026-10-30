@@ -103,3 +103,9 @@ BEGIN
         EXECUTE format('CREATE TRIGGER audit_direct_change AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION "audit_direct_change"()', t);
     END LOOP;
 END $$;
+
+-- A função só roda como gatilho: ninguém da API pública do Supabase pode chamá-la
+DO $$ BEGIN
+    REVOKE EXECUTE ON FUNCTION "audit_direct_change"() FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION "audit_direct_change"() FROM anon, authenticated;
+EXCEPTION WHEN undefined_object THEN NULL; END $$;
