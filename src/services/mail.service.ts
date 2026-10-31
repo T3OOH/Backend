@@ -148,4 +148,19 @@ export function passwordChangedEmail(name: string, info: { when: Date; device: s
     });
 }
 
+/** Confirmação do pedido de orçamento da T3 Solution, com o resumo do projeto enviado. */
+export function solutionRequestEmail(name: string, protocol: string, details: [string, string][]) {
+    return brandEmail({
+        eyebrow: 'T3 Solution · Orçamento',
+        title: 'Recebemos seu pedido',
+        paragraphs: [
+            `${esc(firstName(name))}, seu pedido de orçamento para um painel de LED chegou à equipe da T3 Solution.`,
+            'Vamos analisar o espaço e o uso da tela e falar com você pelo WhatsApp informado para fechar medidas, especificação e proposta.',
+        ],
+        details: [['Protocolo', `#${protocol}`], ...details],
+        button: { label: 'Acompanhar no meu perfil', url: `${SITE()}/perfil?aba=orcamentos` },
+        footnote: 'Fotos do local e medidas aproximadas ajudam a chegar mais rápido na proposta: responda o consultor quando ele entrar em contato.',
+    });
+}
+
 export const siteUrl = SITE;

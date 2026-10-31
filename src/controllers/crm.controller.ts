@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../database/prisma';
 import { calculateQuote } from '../services/pricing.service';
 import { readAttribution } from '../lib/attribution';
-import { DEAL_LINES, SOLUTION_APPLICATIONS, solutionDetailsSchema } from '../lib/solution';
+import { DEAL_LINES, SOLUTION_APPLICATIONS, SOLUTION_SERVICE_LABEL, solutionDetailsSchema } from '../lib/solution';
+import { mailEnabled, sendMailInBackground, solutionRequestEmail } from '../services/mail.service';
 
 const createClientSchema = z.object({
     name: z.string().min(2),
@@ -48,7 +49,11 @@ const updateDealSchema = z.object({
     solution: solutionDetailsSchema.optional().nullable(),
 }).strict();
 
-/** Formulário do site da T3 Solution: vira um negócio na fila do CRM. */
+/**
+ * Formulário do site da T3 Solution: vira um negócio na fila do CRM.
+ * Ambiente, medidas e serviços são opcionais e já chegam no projeto do negócio (sem o pitch,
+ * que a equipe define na proposta).
+ */
 const solutionLeadSchema = z.object({
     name: z.string().trim().min(2).max(120),
     email: z.string().trim().toLowerCase().email(),
@@ -56,7 +61,7 @@ const solutionLeadSchema = z.object({
     company: z.string().trim().max(120).optional().nullable(),
     application: z.enum(SOLUTION_APPLICATIONS),
     message: z.string().trim().max(3000).optional().nullable(),
-});
+}).extend(solutionDetailsSchema.pick({ environment: true, width: true, height: true, services: true }).shape);
 
 // Checkout do Frontend: apenas escolhas do cliente; valores são calculados no servidor
 const checkoutSchema = z.object({
@@ -524,6 +529,12 @@ export const crmController = {
                     client = await tx.crmClient.create({
                         data: { name: lead.name, email: lead.email, phone: lead.phone, whatsapp: lead.phone, company: lead.company || null, sellerId: fallbackSeller.id },
                     });
+                } else if (!client.phone || !client.whatsapp || (!client.company && lead.company)) {
+                    // Ficha antiga sem telefone ou empresa: completa com o que veio agora, sem sobrescrever
+                    client = await tx.crmClient.update({
+                        where: { id: client.id },
+                        data: { phone: client.phone || lead.phone, whatsapp: client.whatsapp || lead.phone, company: client.company || lead.company || null },
+                    });
                 }
 
                 return tx.crmDeal.create({
@@ -531,7 +542,14 @@ export const crmController = {
                         title: `T3 Solution · ${lead.application}${lead.company ? ` · ${lead.company}` : ''}`,
                         clientId: client.id,
                         line: 'SOLUTION',
-                        solution: { application: lead.application, notes: lead.message || null },
+                        solution: {
+                            application: lead.application,
+                            environment: lead.environment ?? null,
+                            width: lead.width ?? null,
+                            height: lead.height ?? null,
+                            services: lead.services ?? [],
+                            notes: lead.message || null,
+                        },
                         expectedValue: 0,
                         originalValue: 0,
                         probability: 0,
@@ -539,7 +557,17 @@ export const crmController = {
                     },
                 });
             });
-            return res.status(201).json({ id: deal.id, message: 'Recebemos seu pedido. A equipe da T3 Solution vai falar com você.' });
+            // Mesmo protocolo que o cliente vê em "Meu perfil → Orçamentos"
+            const protocol = deal.id.slice(0, 6).toUpperCase();
+            if (mailEnabled) {
+                const n = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+                const details: [string, string][] = [['Aplicação', lead.application]];
+                if (lead.environment) details.push(['Ambiente', lead.environment === 'indoor' ? 'Indoor' : 'Outdoor']);
+                if (lead.width && lead.height) details.push(['Medidas', `${n(lead.width)} × ${n(lead.height)} m (${n(lead.width * lead.height)} m²)`]);
+                if (lead.services?.length) details.push(['Serviços', lead.services.map((s) => SOLUTION_SERVICE_LABEL[s]).join(', ')]);
+                sendMailInBackground(lead.email, `Pedido #${protocol} recebido · T3 Solution`, solutionRequestEmail(lead.name, protocol, details), 'pedido T3 Solution');
+            }
+            return res.status(201).json({ id: deal.id, protocol, message: 'Recebemos seu pedido. A equipe da T3 Solution vai falar com você.' });
         } catch (error) {
             console.error('[CRM] Lead T3 Solution:', error);
             return res.status(500).json({ error: 'Não foi possível enviar agora. Tente de novo ou fale pelo WhatsApp.' });
