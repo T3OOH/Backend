@@ -155,6 +155,9 @@ export const profileController = {
                     months: d.contractMonths,
                     seller: d.seller,
                     items: d.items.map((i) => ({ id: i.id, priceSnapshot: i.priceSnapshot, panel: i.panel })),
+                    // Pedidos da T3 Solution não têm painéis da rede: o perfil mostra o projeto
+                    line: d.line,
+                    solution: d.line === 'SOLUTION' ? d.solution : null,
                 })),
                 ...orders.map((o) => ({
                     id: o.id,

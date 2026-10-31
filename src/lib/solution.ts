@@ -8,6 +8,15 @@ export const SOLUTION_APPLICATIONS = ['Residências', 'Condomínios', 'Empresas'
 export const SOLUTION_ENVIRONMENTS = ['indoor', 'outdoor'] as const;
 export const SOLUTION_SERVICES = ['fornecimento', 'estrutura', 'instalacao', 'conteudo', 'manutencao'] as const;
 
+/** Rótulos dos serviços (e-mail de confirmação do pedido). */
+export const SOLUTION_SERVICE_LABEL: Record<(typeof SOLUTION_SERVICES)[number], string> = {
+    fornecimento: 'Fornecimento da tela',
+    estrutura: 'Estrutura e fixação',
+    instalacao: 'Instalação e configuração',
+    conteudo: 'Gestão de conteúdo',
+    manutencao: 'Manutenção e suporte',
+};
+
 export const DEAL_LINES = ['OOH', 'SOLUTION'] as const;
 
 const meters = z.coerce.number().min(0).max(200).optional().nullable();
