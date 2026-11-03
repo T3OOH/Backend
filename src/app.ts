@@ -27,6 +27,7 @@ import { institutionalRoutes } from './routes/institutional.routes';
 import { analyticsRoutes } from './routes/analytics.routes';
 import { reportsRoutes } from './routes/reports.routes';
 import { auditRoutes } from './routes/audit.routes';
+import { downloadsRoutes } from './routes/downloads.routes';
 import { requestContext } from './lib/requestContext';
 import { recordRequestError } from './services/audit.service';
 
@@ -211,6 +212,7 @@ app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/audit', auditRoutes);
+app.use('/downloads', downloadsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/banners', bannerRoutes); 
