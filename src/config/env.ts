@@ -33,6 +33,8 @@ const envSchema = z.object({
     GITHUB_TOKEN: z.string().optional(),
     // Repositórios acompanhados no registro (dono/nome, separados por vírgula)
     AUDIT_REPOSITORIES: z.string().default('T3OOH/Backend,T3OOH/Frontend'),
+    // App desktop da equipe: releases (privadas) deste repositório; o download usa o GITHUB_TOKEN
+    DESKTOP_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('T3OOH/AppT3'),
 });
 
 const result = envSchema.safeParse(source);
