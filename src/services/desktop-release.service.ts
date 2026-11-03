@@ -20,6 +20,14 @@ export interface DesktopFile {
     /** Sistema do arquivo, pelo nome/extensão. */
     platform: 'windows' | 'macos' | 'linux';
     kind: 'instalador' | 'portatil';
+    /** SHA-256 (hex) calculado pelo GitHub no upload; o app confere antes de instalar. Null se o GitHub não informou. */
+    sha256: string | null;
+}
+
+/** "sha256:<hex>" do GitHub vira só o hex; qualquer outro formato vira null. */
+export function sha256Of(digest?: string | null): string | null {
+    const match = /^sha256:([0-9a-f]{64})$/i.exec(digest ?? '');
+    return match ? match[1].toLowerCase() : null;
 }
 
 export interface DesktopRelease {
@@ -58,7 +66,7 @@ export function latestDesktopRelease(): Promise<DesktopRelease> {
         }
         const body = await res.json() as {
             tag_name: string; name?: string; published_at: string; body?: string;
-            assets: { id: number; name: string; size: number; state: string }[];
+            assets: { id: number; name: string; size: number; state: string; digest?: string | null }[];
         };
         return {
             version: body.tag_name.replace(/^v/i, ''),
@@ -73,6 +81,7 @@ export function latestDesktopRelease(): Promise<DesktopRelease> {
                     size: a.size,
                     platform: platformOf(a.name),
                     kind: /\.(msi|exe|dmg|pkg|deb|rpm)$/i.test(a.name) ? 'instalador' as const : 'portatil' as const,
+                    sha256: sha256Of(a.digest),
                 })),
         };
     });
