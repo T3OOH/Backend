@@ -183,9 +183,24 @@ const passwordUpdateLimiter = rateLimit({
 const launcherLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
+    // Só senha errada conta: quem acerta pode baixar de novo sem ficar bloqueado
+    skipSuccessfulRequests: true,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     message: { error: 'Muitas tentativas de senha. Aguarde 15 minutos e tente de novo.' },
+});
+
+/**
+ * Formulários públicos que gravam no banco (cadastro, contato, pedido do carrinho): limite próprio
+ * para spam não encher as tabelas (o global de 1500 por 15 min é para navegação).
+ */
+const publicWriteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    skip: (req) => req.method !== 'POST',
+    message: { error: 'Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo.' },
 });
 
 /** Renovação de sessão: cada aba renova a cada ~15 min; o teto barra tentativas em massa. */
@@ -213,6 +228,9 @@ app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
 app.use(apiLimiter);
 app.use('/auth/login', loginLimiter);
+app.use('/auth/register', publicWriteLimiter);
+app.use('/contacts', publicWriteLimiter);
+app.use('/crm/deals/checkout', publicWriteLimiter);
 app.use('/auth/google', loginLimiter);
 app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
@@ -225,7 +243,8 @@ app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/audit', auditRoutes);
-app.use('/downloads/launcher', launcherLimiter);
+// Só a senha (POST) tem o limite apertado; a consulta de versão do launcher logado (GET) não
+app.use('/downloads/launcher', (req, res, next) => (req.method === 'POST' ? launcherLimiter(req, res, next) : next()));
 app.use('/downloads', downloadsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
