@@ -11,7 +11,7 @@ const clientErrorLimiter = rateLimit({
     max: 30,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error: 'Rate limit exceeded.' },
+    message: { error: 'Muitas requisições. Aguarde alguns minutos e tente de novo.' },
 });
 auditRoutes.post('/client-error', clientErrorLimiter, auditController.clientError);
 

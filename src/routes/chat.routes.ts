@@ -50,7 +50,7 @@ chatRoutes.get('/contacts', async (req: Request, res: Response) => {
 
         res.json(formatted);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar contatos' });
+        res.status(500).json({ error: 'Erro ao buscar contatos.' });
     }
 });
 
@@ -87,7 +87,7 @@ chatRoutes.get('/:clientId/messages', async (req: Request, res: Response) => {
 
         res.json(messages);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar mensagens' });
+        res.status(500).json({ error: 'Erro ao buscar mensagens.' });
     }
 });
 

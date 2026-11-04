@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
 
-// ✅ Importando a instância correta do Prisma do seu projeto
+import { z } from 'zod';
 import { prisma } from '../database/prisma';
+import { isRecordNotFound } from '../lib/prismaErrors';
+
+const portfolioImageSchema = z.object({
+    url: z.string({ error: 'A URL da imagem é obrigatória.' }).trim().min(1, 'A URL da imagem é obrigatória.').url('A URL da imagem é inválida.').max(1000),
+    alt: z.string().trim().max(200).optional().nullable(),
+}).strict();
 
 export const solutionController = {
 
@@ -22,11 +28,11 @@ export const solutionController = {
     // Adicionar uma nova imagem ao portfólio
     async addPortfolioImage(req: Request, res: Response) {
         try {
-            const { url, alt } = req.body;
-
-            if (!url) {
-                return res.status(400).json({ error: 'A URL da imagem é obrigatória.' });
+            const parsed = portfolioImageSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos.', details: parsed.error.issues });
             }
+            const { url, alt } = parsed.data;
 
             const newImage = await prisma.solutionPortfolio.create({
                 data: {
@@ -51,10 +57,11 @@ export const solutionController = {
                 where: { id }
             });
 
-            return res.status(200).json({ message: 'Imagem removida com sucesso.' });
+            return res.status(204).send();
         } catch (error) {
-            console.error('Erro ao deletar imagem:', error);
-            return res.status(500).json({ error: 'Erro ao remover imagem ou imagem não encontrada.' });
+            if (isRecordNotFound(error)) return res.status(404).json({ error: 'Imagem não encontrada.' });
+            console.error('Erro ao excluir imagem:', error);
+            return res.status(500).json({ error: 'Erro interno ao remover a imagem.' });
         }
     }
 };

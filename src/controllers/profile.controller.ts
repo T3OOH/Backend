@@ -66,9 +66,10 @@ export const profileController = {
                 where: { id: req.user!.id },
                 select: profileSelect
             });
+            if (!user) return res.status(404).json({ error: 'Conta não encontrada.' });
             return res.json(toProfile(user));
         } catch (error) {
-            return res.status(500).json({ error: 'Erro ao buscar perfil' });
+            return res.status(500).json({ error: 'Erro ao buscar perfil.' });
         }
     },
 
@@ -88,7 +89,7 @@ export const profileController = {
 
             return res.json(toProfile(user));
         } catch (error) {
-            return res.status(500).json({ error: 'Erro ao atualizar perfil' });
+            return res.status(500).json({ error: 'Erro ao atualizar perfil.' });
         }
     },
 
@@ -175,7 +176,7 @@ export const profileController = {
             return res.json(list);
         } catch (error) {
             console.error('[Profile] getMyOrders Error:', error);
-            return res.status(500).json({ error: 'Erro ao buscar orçamentos' });
+            return res.status(500).json({ error: 'Erro ao buscar orçamentos.' });
         }
     },
 

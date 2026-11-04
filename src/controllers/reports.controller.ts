@@ -10,7 +10,7 @@ export const reportsController = {
     /** Vendas, funil, previsão, receita mensal e origem dos negócios. */
     async summary(req: Request, res: Response) {
         const parsed = summaryQuery.safeParse(req.query);
-        if (!parsed.success) return res.status(400).json({ error: 'Período inválido.' });
+        if (!parsed.success) return res.status(400).json({ error: 'Período inválido. Use days = 30, 90, 180 ou 365.' });
         try {
             // Receita mensal cobre 12 meses, então a busca vai até 1 ano atrás (e todos os abertos)
             const yearAgo = new Date(Date.now() - 366 * 86_400_000);
@@ -27,14 +27,14 @@ export const reportsController = {
             return res.json(buildSummary(deals, orders, new Date(), parsed.data.days));
         } catch (error) {
             console.error('[Reports] summary Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
     /** Painéis x próximos meses: o que já está contratado e o que está livre para vender. */
     async occupancy(req: Request, res: Response) {
         const parsed = occupancyQuery.safeParse(req.query);
-        if (!parsed.success) return res.status(400).json({ error: 'Período inválido.' });
+        if (!parsed.success) return res.status(400).json({ error: 'Período inválido. Use months entre 1 e 12.' });
         try {
             const now = new Date();
             const [panels, orders, deals] = await Promise.all([
@@ -69,7 +69,7 @@ export const reportsController = {
             return res.json(buildOccupancy(panels, bookings, now, parsed.data.months));
         } catch (error) {
             console.error('[Reports] occupancy Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 };
