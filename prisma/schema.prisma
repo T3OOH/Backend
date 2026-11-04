@@ -60,6 +60,9 @@ model User {
   crmNotes       CrmNote[]     @relation("NoteAuthor")
   sessions       UserSession[]
   securityEvents SecurityEvent[]
+  meetingsHosted   Meeting[]            @relation("MeetingHost")
+  meetingInvites   MeetingParticipant[] @relation("MeetingInvites")
+  meetingMessages  MeetingMessage[]     @relation("MeetingMessages")
 
   @@index([companyId])
   @@map("users")
@@ -575,4 +578,59 @@ model AuditLog {
   @@index([entity, createdAt])
   @@index([actorId, createdAt])
   @@map("audit_logs")
+}
+
+
+// ==========================================
+// REUNIÕES (vídeo, áudio, tela e chat da equipe)
+// ==========================================
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+model Meeting {
+  id           String               @id @default(uuid())
+  title        String
+  hostId       String
+  host         User                 @relation("MeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
+  status       MeetingStatus        @default(SCHEDULED)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  participants MeetingParticipant[]
+  messages     MeetingMessage[]
+
+  @@index([hostId])
+  @@index([status, scheduledAt])
+  @@map("meetings")
+}
+
+model MeetingParticipant {
+  meetingId String
+  userId    String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User    @relation("MeetingInvites", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, userId])
+  @@index([userId])
+  @@map("meeting_participants")
+}
+
+model MeetingMessage {
+  id        String   @id @default(uuid())
+  meetingId String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  sender    User     @relation("MeetingMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, createdAt])
+  @@map("meeting_messages")
 }

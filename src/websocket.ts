@@ -4,6 +4,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { Role } from '@prisma/client';
 import { prisma } from './database/prisma';
 import { env, isAllowedOrigin } from './config/env';
+import { initMeetingsNamespace } from './meetings.socket';
 
 export let io: Server;
 
@@ -33,6 +34,8 @@ export function initWebSocket(httpServer: HttpServer) {
     // CORS SOCKET.IO (mesmas origens autorizadas da API)
     // ========================================================
     io = new Server(httpServer, {
+        // Teto do pacote: o chat do CRM só manda texto e links; a sinalização das reuniões cabe folgada
+        maxHttpBufferSize: 128 * 1024,
         cors: {
             origin: function (requestOrigin, callback) {
                 callback(null, !requestOrigin || isAllowedOrigin(requestOrigin));
@@ -50,7 +53,8 @@ export function initWebSocket(httpServer: HttpServer) {
         if (!token) return next(new Error('Não autenticado.'));
 
         try {
-            const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload & { role?: Role };
+            const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload & { role?: Role; typ?: string; mid?: string };
+            if (payload.typ !== undefined || payload.mid !== undefined) return next(new Error('Sem permissão.'));
             if (!payload.sub || !payload.role || !STAFF_ROLES.has(payload.role)) {
                 return next(new Error('Sem permissão.'));
             }
@@ -60,6 +64,9 @@ export function initWebSocket(httpServer: HttpServer) {
             return next(new Error('Token inválido ou expirado.'));
         }
     });
+
+    // Reuniões: namespace próprio (/reunioes), com autenticação própria
+    initMeetingsNamespace(io);
 
     io.on('connection', (socket: Socket) => {
         const user = socket.data.user as SocketUser;

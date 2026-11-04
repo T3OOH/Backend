@@ -9,6 +9,9 @@ interface AccessTokenPayload extends JwtPayload {
     role?: Role;
     /** Sessão do aparelho. Tokens antigos (antes das sessões) não têm e expiram sozinhos em até 1 h. */
     sid?: string;
+    /** Token de reunião (typ 'meeting', mid): vale só nas rotas e no socket de reuniões. */
+    typ?: string;
+    mid?: string;
 }
 
 const validRoles = new Set(Object.values(Role));
@@ -30,6 +33,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     }
 
     {
+        // Token de reunião nunca autentica a API normal
+        if (payload.typ !== undefined || payload.mid !== undefined) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
 
         if (!payload.sub || !payload.role || !validRoles.has(payload.role)) {
             return res.status(401).json({ error: 'Token inválido.' });

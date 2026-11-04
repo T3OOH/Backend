@@ -33,14 +33,14 @@ export interface AuditEntry {
 }
 
 /** Modelos fora do registro: o próprio registro, visitas, sessões (renovação a cada hora) e chat. */
-export const AUDIT_SKIP_MODELS = new Set(['AuditLog', 'AnalyticsEvent', 'UserSession', 'CrmMessage']);
+export const AUDIT_SKIP_MODELS = new Set(['AuditLog', 'AnalyticsEvent', 'UserSession', 'CrmMessage', 'MeetingMessage']);
 
 /** Tabela de cada modelo (a mesma que o gatilho do banco grava em "entity"). */
 export const MODEL_TABLE: Record<string, string> = {
     Company: 'companies', User: 'users', Panel: 'panels', Institutional: 'institutional', Category: 'categories',
     Order: 'orders', OrderItem: 'order_items', CrmClient: 'crm_clients', CrmDeal: 'crm_deals', CrmDealItem: 'crm_deal_items',
     CrmActivity: 'crm_activities', CrmNote: 'crm_notes', CrmCoupon: 'crm_coupons', AgendaTask: 'agenda_tasks', Banner: 'banners',
-    SolutionPortfolio: 'solution_portfolio', Contact: 'contacts', SystemSetting: 'system_settings', SecurityEvent: 'security_events',
+    SolutionPortfolio: 'solution_portfolio', Contact: 'contacts', SystemSetting: 'system_settings', SecurityEvent: 'security_events', Meeting: 'meetings',
 };
 
 /** Nome amigável de cada tabela. */
@@ -48,7 +48,7 @@ const ENTITY_LABEL: Record<string, string> = {
     companies: 'empresa', users: 'usuário', panels: 'painel', institutional: 'página Sobre', categories: 'categoria',
     orders: 'pedido', order_items: 'item de pedido', crm_clients: 'cliente', crm_deals: 'negócio', crm_deal_items: 'painel do negócio',
     crm_activities: 'atividade', crm_notes: 'anotação', crm_coupons: 'cupom', agenda_tasks: 'compromisso', banners: 'banner',
-    solution_portfolio: 'projeto Solution', contacts: 'contato do site', system_settings: 'configuração', security_events: 'evento de segurança',
+    solution_portfolio: 'projeto Solution', contacts: 'contato do site', system_settings: 'configuração', security_events: 'evento de segurança', meetings: 'reunião',
 };
 
 /** Campos que nunca entram no registro. */

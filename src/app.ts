@@ -28,6 +28,7 @@ import { analyticsRoutes } from './routes/analytics.routes';
 import { reportsRoutes } from './routes/reports.routes';
 import { auditRoutes } from './routes/audit.routes';
 import { downloadsRoutes } from './routes/downloads.routes';
+import { meetingRoutes } from './routes/meeting.routes';
 import { requestContext } from './lib/requestContext';
 import { recordRequestError } from './services/audit.service';
 
@@ -224,6 +225,7 @@ app.use('/orders', orderRoutes);
 app.use('/crm', crmRoutes);
 app.use('/chat', chatRoutes);
 app.use('/agenda', agendaRoutes);
+app.use('/meetings', meetingRoutes);
 app.use('/coupons', couponRoutes);
 app.use('/pricing', pricingRoutes);
 app.use('/profile', profileRoutes);
