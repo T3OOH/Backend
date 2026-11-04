@@ -168,6 +168,17 @@ const passwordResetLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Muitos pedidos de recuperação. Aguarde alguns minutos e tente de novo.' },
 });
+/**
+ * Formulário de orçamento da T3 Solution (público): mesma regra anti-spam da recuperação de senha
+ * (cada pedido dispara e-mails para o cliente e para todo o comercial), com mensagem própria.
+ */
+const solutionLeadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitos pedidos de orçamento seguidos. Aguarde alguns minutos ou fale com a gente pelo WhatsApp.' },
+});
 const passwordUpdateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -218,7 +229,7 @@ app.use('/auth/forgot-password', passwordResetLimiter);
 app.use('/auth/reset-password', passwordUpdateLimiter);
 app.use('/auth/report-access', passwordUpdateLimiter);
 app.use('/auth/refresh', refreshLimiter);
-app.use('/crm/deals/solution', passwordResetLimiter);
+app.use('/crm/deals/solution', solutionLeadLimiter);
 app.use('/profile/password', passwordUpdateLimiter);
 app.use('/auth', authRoutes);
 app.use('/analytics/events', analyticsLimiter);

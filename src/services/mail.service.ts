@@ -163,4 +163,24 @@ export function solutionRequestEmail(name: string, protocol: string, details: [s
     });
 }
 
+/**
+ * Aviso ao comercial: pedido novo na fila do CRM, sem consultor. Vai para todos com o cargo; o
+ * primeiro que assumir fica com ele (o "assumir" é atômico na API). O botão só abre a fila:
+ * nenhum link do e-mail assume o pedido sozinho (leitores de e-mail abrem links para conferir).
+ */
+export function newQueueDealEmail(name: string, deal: { protocol: string; line: 'OOH' | 'SOLUTION'; title: string; details: [string, string][] }) {
+    const linha = deal.line === 'SOLUTION' ? 'T3 Solution' : 'T3 OOH';
+    return brandEmail({
+        eyebrow: `${linha} · Fila do CRM`,
+        title: 'Pedido novo para assumir',
+        paragraphs: [
+            `${esc(firstName(name))}, chegou um pedido novo pelo site e ele ainda não tem consultor.`,
+            'Este aviso foi para toda a equipe comercial: o primeiro que assumir fica com o atendimento. Se outra pessoa assumir antes, o sistema avisa e o pedido sai da fila.',
+        ],
+        details: [['Protocolo', `#${deal.protocol}`], ['Pedido', deal.title], ...deal.details],
+        button: { label: 'Abrir a fila e assumir', url: `${SITE()}/crm` },
+        footnote: 'Você recebe este aviso por ter o cargo Comercial na T3 OOH.',
+    });
+}
+
 export const siteUrl = SITE;
