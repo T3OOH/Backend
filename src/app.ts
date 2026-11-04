@@ -176,6 +176,18 @@ const passwordUpdateLimiter = rateLimit({
     message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
 
+/**
+ * Senha do download do launcher: 5 tentativas a cada 15 minutos por IP. Uma senha de 6 dígitos
+ * tem 1 milhão de combinações; com o limite, adivinhar levaria décadas.
+ */
+const launcherLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitas tentativas de senha. Aguarde 15 minutos e tente de novo.' },
+});
+
 /** Renovação de sessão: cada aba renova a cada ~15 min; o teto barra tentativas em massa. */
 const refreshLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -213,6 +225,7 @@ app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/audit', auditRoutes);
+app.use('/downloads/launcher', launcherLimiter);
 app.use('/downloads', downloadsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);

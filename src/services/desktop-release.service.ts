@@ -97,6 +97,11 @@ export async function desktopDownloadLink(fileId: number): Promise<string> {
     if (!release.files.some((f) => f.id === fileId)) {
         throw new DesktopReleaseError(404, 'Arquivo não encontrado na versão atual do app.');
     }
+    return assetLink(fileId);
+}
+
+/** URL assinada e temporária do GitHub para um arquivo de release (o token nunca sai da API). */
+async function assetLink(fileId: number): Promise<string> {
     const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/assets/${fileId}`, {
         headers: headers('application/octet-stream'),
         redirect: 'manual',
@@ -105,4 +110,26 @@ export async function desktopDownloadLink(fileId: number): Promise<string> {
     if (res.status >= 300 && res.status < 400 && location) return location;
     console.error(`[Desktop] GitHub respondeu ${res.status} ao gerar o link do arquivo ${fileId}`);
     throw new DesktopReleaseError(502, 'Não foi possível gerar o link de download agora. Tente de novo em instantes.');
+}
+
+/** Zip do T3 Launcher: o nome tem "launcher" e termina em .zip. */
+export function isLauncherAsset(name: string): boolean {
+    return /launcher/i.test(name) && /\.zip$/i.test(name);
+}
+
+/**
+ * Link do T3 Launcher, guardado numa release própria (tag LAUNCHER_RELEASE_TAG) para não se
+ * misturar com as versões do T3 Gestor que o app e o launcher instalam.
+ */
+export async function launcherDownloadLink(): Promise<{ url: string; name: string; size: number }> {
+    const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/tags/${env.LAUNCHER_RELEASE_TAG}`, { headers: headers() });
+    if (res.status === 404) throw new DesktopReleaseError(404, 'O launcher ainda não foi publicado para download.');
+    if (!res.ok) {
+        console.error(`[Desktop] GitHub respondeu ${res.status} ao buscar a release do launcher`);
+        throw new DesktopReleaseError(502, 'Não foi possível consultar o launcher agora. Tente de novo em instantes.');
+    }
+    const body = (await res.json()) as { assets?: { id: number; name: string; size: number; state: string }[] };
+    const zip = (body.assets ?? []).find((a) => a.state === 'uploaded' && isLauncherAsset(a.name));
+    if (!zip) throw new DesktopReleaseError(404, 'O launcher ainda não foi publicado para download.');
+    return { url: await assetLink(zip.id), name: zip.name, size: zip.size };
 }

@@ -1,6 +1,16 @@
+import { createHash, timingSafeEqual } from 'crypto';
 import { Request, Response } from 'express';
-import { DesktopReleaseError, desktopDownloadLink, latestDesktopRelease } from '../services/desktop-release.service';
+import { env } from '../config/env';
+import { DesktopReleaseError, desktopDownloadLink, latestDesktopRelease, launcherDownloadLink } from '../services/desktop-release.service';
 import { audit } from '../services/audit.service';
+
+/** Compara a senha sem vazar, pelo tempo de resposta, quantos caracteres acertou. */
+export function senhaConfere(digitada: unknown, esperada: string | undefined): boolean {
+    if (!esperada || typeof digitada !== 'string' || !digitada) return false;
+    const a = createHash('sha256').update(digitada).digest();
+    const b = createHash('sha256').update(esperada).digest();
+    return timingSafeEqual(a, b);
+}
 
 function fail(res: Response, error: unknown, fallback: string) {
     if (error instanceof DesktopReleaseError) return res.status(error.status).json({ error: error.message });
@@ -15,6 +25,27 @@ export const downloadsController = {
             return res.json(await latestDesktopRelease());
         } catch (error) {
             return fail(res, error, '[Desktop] Release:');
+        }
+    },
+
+    /**
+     * T3 Launcher pela área de download do site: sem login, protegido por senha (conferida aqui,
+     * no servidor) e com limite de tentativas por IP (app.ts). Devolve um link temporário.
+     */
+    async launcher(req: Request, res: Response) {
+        if (!env.LAUNCHER_DOWNLOAD_PASSWORD) {
+            return res.status(503).json({ error: 'O download do launcher ainda não foi configurado no servidor.' });
+        }
+        if (!senhaConfere(req.body?.senha, env.LAUNCHER_DOWNLOAD_PASSWORD)) {
+            void audit.write({ source: 'api', action: 'download', level: 'warning', entity: 'launcher', entityId: 'senha', summary: 'Senha errada no download do launcher' });
+            return res.status(401).json({ error: 'Senha incorreta.' });
+        }
+        try {
+            const link = await launcherDownloadLink();
+            void audit.write({ source: 'api', action: 'download', level: 'info', entity: 'launcher', entityId: link.name, summary: 'Download do T3 Launcher (área com senha)' });
+            return res.json({ ...link, expiresIn: 300 });
+        } catch (error) {
+            return fail(res, error, '[Desktop] Launcher:');
         }
     },
 
