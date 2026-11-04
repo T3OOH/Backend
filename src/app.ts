@@ -225,7 +225,8 @@ app.use('/analytics/events', analyticsLimiter);
 app.use('/analytics', analyticsRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/audit', auditRoutes);
-app.use('/downloads/launcher', launcherLimiter);
+// Só a senha (POST) tem o limite apertado; a consulta de versão do launcher logado (GET) não
+app.use('/downloads/launcher', (req, res, next) => (req.method === 'POST' ? launcherLimiter(req, res, next) : next()));
 app.use('/downloads', downloadsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);

@@ -117,19 +117,42 @@ export function isLauncherAsset(name: string): boolean {
     return /launcher/i.test(name) && /\.zip$/i.test(name);
 }
 
+/** Versão no nome do zip ("T3-Launcher-1.2.0.zip") ou no título da release ("T3 Launcher 1.2.0"); "0" se não houver. */
+export function launcherVersion(assetName: string, releaseName?: string | null): string {
+    const m = /(\d+(?:\.\d+){1,3})/.exec(assetName) ?? /(\d+(?:\.\d+){1,3})/.exec(releaseName ?? '');
+    return m ? m[1] : '0';
+}
+
+export interface LauncherRelease {
+    id: number;
+    name: string;
+    size: number;
+    version: string;
+    sha256: string | null;
+}
+
 /**
- * Link do T3 Launcher, guardado numa release própria (tag LAUNCHER_RELEASE_TAG) para não se
+ * Zip do T3 Launcher, guardado numa release própria (tag LAUNCHER_RELEASE_TAG) para não se
  * misturar com as versões do T3 Gestor que o app e o launcher instalam.
  */
-export async function launcherDownloadLink(): Promise<{ url: string; name: string; size: number }> {
+export async function launcherRelease(): Promise<LauncherRelease> {
     const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/tags/${env.LAUNCHER_RELEASE_TAG}`, { headers: headers() });
     if (res.status === 404) throw new DesktopReleaseError(404, 'O launcher ainda não foi publicado para download.');
     if (!res.ok) {
         console.error(`[Desktop] GitHub respondeu ${res.status} ao buscar a release do launcher`);
         throw new DesktopReleaseError(502, 'Não foi possível consultar o launcher agora. Tente de novo em instantes.');
     }
-    const body = (await res.json()) as { assets?: { id: number; name: string; size: number; state: string }[] };
+    const body = (await res.json()) as {
+        name?: string | null;
+        assets?: { id: number; name: string; size: number; state: string; digest?: string | null }[];
+    };
     const zip = (body.assets ?? []).find((a) => a.state === 'uploaded' && isLauncherAsset(a.name));
     if (!zip) throw new DesktopReleaseError(404, 'O launcher ainda não foi publicado para download.');
+    return { id: zip.id, name: zip.name, size: zip.size, version: launcherVersion(zip.name, body.name), sha256: sha256Of(zip.digest) };
+}
+
+/** Link temporário do zip do launcher (área do site com senha e atualização do próprio launcher). */
+export async function launcherDownloadLink(): Promise<{ url: string; name: string; size: number }> {
+    const zip = await launcherRelease();
     return { url: await assetLink(zip.id), name: zip.name, size: zip.size };
 }

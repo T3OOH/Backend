@@ -6,6 +6,9 @@ const downloadsRoutes = Router();
 
 // T3 Launcher: área do site protegida por senha (sem login; limite de tentativas em app.ts)
 downloadsRoutes.post('/launcher', downloadsController.launcher);
+// T3 Launcher se atualizando sozinho: versão publicada e link, só para a equipe logada
+downloadsRoutes.get('/launcher', authMiddleware, requireRoles(...STAFF_ROLES), downloadsController.launcherVersion);
+downloadsRoutes.get('/launcher/link', authMiddleware, requireRoles(...STAFF_ROLES), downloadsController.launcherUpdateLink);
 
 // App desktop: só a equipe interna (gestão e comercial)
 downloadsRoutes.get('/desktop', authMiddleware, requireRoles(...STAFF_ROLES), downloadsController.desktop);
