@@ -40,6 +40,8 @@ export interface DesktopRelease {
 
 const GITHUB = 'https://api.github.com';
 const CACHE_MS = 5 * 60 * 1000;
+/** Prazo de cada chamada ao GitHub: se ele travar, a API responde 502 em vez de ficar pendurada. */
+const GITHUB_TIMEOUT_MS = 10_000;
 const FILE_EXT = /\.(msi|exe|zip|dmg|pkg|deb|rpm|AppImage)$/i;
 
 function headers(accept = 'application/vnd.github+json') {
@@ -58,7 +60,7 @@ function platformOf(name: string): DesktopFile['platform'] {
 /** Última versão publicada (cache de 5 min para não gastar o limite da API do GitHub). */
 export function latestDesktopRelease(): Promise<DesktopRelease> {
     return memoryCache.wrap('desktop:latest', CACHE_MS, async () => {
-        const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/latest`, { headers: headers() });
+        const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/latest`, { headers: headers(), signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
         if (res.status === 404) throw new DesktopReleaseError(404, 'Ainda não há versão do app publicada.');
         if (!res.ok) {
             console.error(`[Desktop] GitHub respondeu ${res.status} ao buscar a release`);
@@ -105,6 +107,7 @@ async function assetLink(fileId: number): Promise<string> {
     const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/assets/${fileId}`, {
         headers: headers('application/octet-stream'),
         redirect: 'manual',
+        signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
     });
     const location = res.headers.get('location');
     if (res.status >= 300 && res.status < 400 && location) return location;
@@ -135,8 +138,13 @@ export interface LauncherRelease {
  * Zip do T3 Launcher, guardado numa release própria (tag LAUNCHER_RELEASE_TAG) para não se
  * misturar com as versões do T3 Gestor que o app e o launcher instalam.
  */
-export async function launcherRelease(): Promise<LauncherRelease> {
-    const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/tags/${env.LAUNCHER_RELEASE_TAG}`, { headers: headers() });
+export function launcherRelease(): Promise<LauncherRelease> {
+    // Cada launcher aberto consulta a versão: o cache poupa o limite de chamadas do token do GitHub
+    return memoryCache.wrap(`launcher:${env.DESKTOP_REPOSITORY}:${env.LAUNCHER_RELEASE_TAG}`, CACHE_MS, buscarLauncherRelease);
+}
+
+async function buscarLauncherRelease(): Promise<LauncherRelease> {
+    const res = await fetch(`${GITHUB}/repos/${env.DESKTOP_REPOSITORY}/releases/tags/${env.LAUNCHER_RELEASE_TAG}`, { headers: headers(), signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
     if (res.status === 404) throw new DesktopReleaseError(404, 'O launcher ainda não foi publicado para download.');
     if (!res.ok) {
         console.error(`[Desktop] GitHub respondeu ${res.status} ao buscar a release do launcher`);

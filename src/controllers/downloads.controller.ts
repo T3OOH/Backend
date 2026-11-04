@@ -14,6 +14,11 @@ export function senhaConfere(digitada: unknown, esperada: string | undefined): b
 
 function fail(res: Response, error: unknown, fallback: string) {
     if (error instanceof DesktopReleaseError) return res.status(error.status).json({ error: error.message });
+    // GitHub não respondeu no prazo (AbortSignal.timeout)
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+        console.error(fallback, 'GitHub não respondeu no prazo');
+        return res.status(502).json({ error: 'O GitHub não respondeu a tempo. Tente de novo em instantes.' });
+    }
     console.error(fallback, error);
     return res.status(500).json({ error: 'Não foi possível concluir agora. Tente de novo em instantes.' });
 }

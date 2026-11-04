@@ -18,11 +18,19 @@ chatRoutes.get('/contacts', async (req: Request, res: Response) => {
             }
         });
 
-        const formatted = await Promise.all(clients.map(async (c) => {
-            // Conta as mensagens não lidas enviadas pelo cliente
-            const unreadCount = await prisma.crmMessage.count({
-                where: { clientId: c.id, isRead: false, senderId: c.id }
-            });
+        // Não lidas enviadas pelo próprio cliente, numa consulta só (antes era uma consulta por cliente)
+        const naoLidas = await prisma.crmMessage.groupBy({
+            by: ['clientId', 'senderId'],
+            where: { isRead: false },
+            _count: { _all: true },
+        });
+        const unreadPorCliente = new Map<string, number>();
+        for (const n of naoLidas) {
+            if (n.senderId === n.clientId) unreadPorCliente.set(n.clientId, n._count._all);
+        }
+
+        const formatted = clients.map((c) => {
+            const unreadCount = unreadPorCliente.get(c.id) ?? 0;
 
             const lastMsg = c.messages[0];
             
@@ -43,7 +51,7 @@ chatRoutes.get('/contacts', async (req: Request, res: Response) => {
                 unread: unreadCount,
                 online: true 
             };
-        }));
+        });
 
         // Ordena para que os que têm mensagens mais recentes fiquem no topo
         formatted.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
