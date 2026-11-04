@@ -9,6 +9,8 @@ declare global {
                 /** Sessão do aparelho (quando o token tem "sid"). */
                 sessionId?: string;
             };
+            /** Reunião a que o token de reunião dá acesso (só nas rotas de /meetings). */
+            meetingId?: string;
         }
     }
 }

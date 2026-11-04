@@ -7,6 +7,13 @@ const source = {
         process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_KEY,
 };
 
+// Servidores STUN/TURN das reuniões: JSON com uma lista de RTCIceServer
+const iceServersSchema = z.array(z.object({
+    urls: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+    username: z.string().optional(),
+    credential: z.string().optional(),
+}).strict()).min(1);
+
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3333),
@@ -36,6 +43,16 @@ const envSchema = z.object({
     // Repositórios acompanhados no registro (dono/nome, separados por vírgula)
     AUDIT_REPOSITORIES: z.string().default('T3OOH/Backend,T3OOH/Frontend'),
     // App desktop da equipe: releases (privadas) deste repositório; o download usa o GITHUB_TOKEN
+    // Opcional: servidores ICE (STUN/TURN) das reuniões, em JSON. Sem ele usa o STUN público do Google
+    MEETING_ICE_SERVERS: z.string().optional().transform((value, ctx) => {
+        if (!value || !value.trim()) return undefined;
+        try {
+            const parsed = iceServersSchema.safeParse(JSON.parse(value));
+            if (parsed.success) return parsed.data;
+        } catch { /* cai no erro abaixo */ }
+        ctx.addIssue({ code: 'custom', message: 'MEETING_ICE_SERVERS deve ser um JSON com a lista de servidores ICE (urls, username, credential).' });
+        return z.NEVER;
+    }),
     DESKTOP_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('T3OOH/AppT3'),
 });
 
