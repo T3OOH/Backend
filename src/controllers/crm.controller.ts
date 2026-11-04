@@ -6,6 +6,7 @@ import { calculateQuote } from '../services/pricing.service';
 import { readAttribution } from '../lib/attribution';
 import { DEAL_LINES, SOLUTION_APPLICATIONS, SOLUTION_SERVICE_LABEL, solutionDetailsSchema } from '../lib/solution';
 import { mailEnabled, sendMailInBackground, solutionRequestEmail } from '../services/mail.service';
+import { avisarComercialEmSegundoPlano } from '../services/queue-notify.service';
 
 const createClientSchema = z.object({
     name: z.string().min(2),
@@ -552,14 +553,21 @@ export const crmController = {
             });
             // Mesmo protocolo que o cliente vê em "Meu perfil → Orçamentos"
             const protocol = deal.id.slice(0, 6).toUpperCase();
+            const n = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+            const details: [string, string][] = [['Aplicação', lead.application]];
+            if (lead.environment) details.push(['Ambiente', lead.environment === 'indoor' ? 'Indoor' : 'Outdoor']);
+            if (lead.width && lead.height) details.push(['Medidas', `${n(lead.width)} × ${n(lead.height)} m (${n(lead.width * lead.height)} m²)`]);
+            if (lead.services?.length) details.push(['Serviços', lead.services.map((s) => SOLUTION_SERVICE_LABEL[s]).join(', ')]);
             if (mailEnabled) {
-                const n = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
-                const details: [string, string][] = [['Aplicação', lead.application]];
-                if (lead.environment) details.push(['Ambiente', lead.environment === 'indoor' ? 'Indoor' : 'Outdoor']);
-                if (lead.width && lead.height) details.push(['Medidas', `${n(lead.width)} × ${n(lead.height)} m (${n(lead.width * lead.height)} m²)`]);
-                if (lead.services?.length) details.push(['Serviços', lead.services.map((s) => SOLUTION_SERVICE_LABEL[s]).join(', ')]);
                 sendMailInBackground(lead.email, `Pedido #${protocol} recebido · T3 Solution`, solutionRequestEmail(lead.name, protocol, details), 'pedido T3 Solution');
             }
+            // Fila do CRM: avisa todo o comercial (o primeiro que assumir fica com o pedido)
+            avisarComercialEmSegundoPlano({
+                id: deal.id,
+                line: 'SOLUTION',
+                title: deal.title,
+                details: [['Cliente', lead.company ? `${lead.name} · ${lead.company}` : lead.name], ...details],
+            });
             return res.status(201).json({ id: deal.id, protocol, message: 'Recebemos seu pedido. A equipe da T3 Solution vai falar com você.' });
         } catch (error) {
             console.error('[CRM] Lead T3 Solution:', error);
@@ -707,6 +715,20 @@ export const crmController = {
                 });
 
                 return newDeal;
+            });
+
+            // Fila do CRM: avisa todo o comercial (o primeiro que assumir fica com o pedido)
+            const brl = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+            avisarComercialEmSegundoPlano({
+                id: deal.id,
+                line: 'OOH',
+                title: deal.title,
+                details: [
+                    ['Cliente', clientDetails.company ? `${clientDetails.name} · ${clientDetails.company}` : clientDetails.name],
+                    ['Painéis', String(deal.items.length)],
+                    ['Prazo', `${contractMonths} ${contractMonths === 1 ? 'mês' : 'meses'}`],
+                    ['Valor do contrato', brl(expectedValue)],
+                ],
             });
 
             return res.status(201).json({ ...deal, quote });
