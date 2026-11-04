@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import { prisma } from '../database/prisma';
+import { isRecordNotFound } from '../lib/prismaErrors';
 
 export const userController = {
     async index(req: Request, res: Response) {
@@ -59,6 +60,7 @@ export const userController = {
 
             return res.status(200).json(updatedUser);
         } catch (error) {
+            if (isRecordNotFound(error)) return res.status(404).json({ error: 'Usuário não encontrado.' });
             console.error('Error updating user role:', error);
             return res.status(500).json({ error: 'Erro interno ao atualizar nível de acesso.' });
         }

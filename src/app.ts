@@ -142,7 +142,7 @@ const apiLimiter = rateLimit({
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: (req) => req.method === 'OPTIONS',
-    message: { error: 'Rate limit exceeded. Please try again later.' }
+    message: { error: 'Muitas requisições. Aguarde alguns minutos e tente de novo.' }
 });
 
 /**
@@ -154,7 +154,7 @@ const loginLimiter = rateLimit({
     max: 10,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error: 'Too many login attempts. Please try again later.' },
+    message: { error: 'Muitas tentativas de entrada. Aguarde alguns minutos e tente de novo.' },
 });
 
 /**
@@ -218,7 +218,7 @@ const analyticsLimiter = rateLimit({
     max: 300,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error: 'Rate limit exceeded.' },
+    message: { error: 'Muitas requisições. Aguarde alguns minutos e tente de novo.' },
 });
 
 /**
@@ -266,7 +266,7 @@ app.use('/profile', profileRoutes);
  * 404 Fallback Handler.
  * Intercepts requests that do not match any registered routes.
  */
-app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
+app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 
 /**
  * Global Error Handling Middleware.
@@ -275,7 +275,7 @@ app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {
         return res.status(400).json({
-            error: 'Validation failed.',
+            error: 'Dados inválidos.',
             details: err.issues,
         });
     }
@@ -284,7 +284,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
         return res.status(400).json({ error: err.message });
     }
 
-    if (err instanceof Error && err.message === 'Formato invalido. Envie imagens ou documentos (PDF, DOC).') {
+    if (err instanceof Error && err.message === 'Formato inválido. Envie imagens (JPG, PNG, WebP) ou documentos (PDF, DOC, DOCX).') {
         return res.status(400).json({ error: err.message });
     }
 
@@ -306,7 +306,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     }
 
     console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 
 export default app;

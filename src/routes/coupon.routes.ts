@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DiscountType } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
+import { isRecordNotFound } from '../lib/prismaErrors';
 import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 const couponRoutes = Router();
@@ -49,7 +50,7 @@ couponRoutes.get('/', async (req: Request, res: Response) => {
         res.json(coupons);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Erro ao buscar cupons' });
+        res.status(500).json({ error: 'Erro ao buscar cupons.' });
     }
 });
 
@@ -57,7 +58,7 @@ couponRoutes.get('/', async (req: Request, res: Response) => {
 couponRoutes.post('/', async (req: Request, res: Response) => {
     const parsed = createCouponSchema.safeParse(req.body);
     if (!parsed.success) {
-        return res.status(400).json({ error: 'Dados inválidos.', details: parsed.error.issues });
+        return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos.', details: parsed.error.issues });
     }
     const { code, discountType, value, minValue, validUntil, singleUse } = parsed.data;
 
@@ -67,7 +68,7 @@ couponRoutes.post('/', async (req: Request, res: Response) => {
         // Verifica se o código já existe
         const existing = await prisma.crmCoupon.findUnique({ where: { code: normalizedCode } });
         if (existing) {
-            return res.status(400).json({ error: 'Este código de cupom já existe.' });
+            return res.status(409).json({ error: 'Este código de cupom já existe.' });
         }
 
         const coupon = await prisma.crmCoupon.create({
@@ -85,7 +86,7 @@ couponRoutes.post('/', async (req: Request, res: Response) => {
         res.status(201).json(coupon);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Erro ao criar cupom' });
+        res.status(500).json({ error: 'Erro ao criar cupom.' });
     }
 });
 
@@ -97,9 +98,11 @@ couponRoutes.delete('/:id', async (req: Request, res: Response) => {
         await prisma.crmCoupon.delete({
             where: { id }
         });
-        res.json({ message: 'Cupom excluído com sucesso' });
+        res.status(204).send();
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao excluir cupom' });
+        if (isRecordNotFound(error)) return res.status(404).json({ error: 'Cupom não encontrado.' });
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao excluir cupom.' });
     }
 });
 

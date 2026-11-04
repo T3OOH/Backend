@@ -33,7 +33,7 @@ export class UploadController {
     async uploadImage(req: Request, res: Response) {
         // 1. Verifica se o middleware capturou o arquivo
         if (!req.file) {
-            return res.status(400).json({ message: 'Nenhum arquivo enviado.' });
+            return res.status(400).json({ error: 'Nenhum arquivo enviado. Use o campo "file".' });
         }
 
         try {
@@ -63,11 +63,11 @@ export class UploadController {
                 .getPublicUrl(path);
 
             // 5. Retorna a URL para o frontend salvar no banco de dados
-            return res.status(200).json({ url: data.publicUrl });
+            return res.status(201).json({ url: data.publicUrl });
 
         } catch (error: any) {
             console.error('Erro no UploadController:', error);
-            return res.status(500).json({ message: 'Erro interno ao processar o upload.' });
+            return res.status(500).json({ error: 'Erro interno ao processar o upload.' });
         }
     }
 }

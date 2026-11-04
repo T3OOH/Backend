@@ -125,7 +125,7 @@ export const orderController = {
         const { status, sellerId } = req.body;
 
         if (status && !Object.values(OrderStatus).includes(status as OrderStatus)) {
-            return res.status(400).json({ error: 'Status de pedido inválido.' });
+            return res.status(400).json({ error: `Status de pedido inválido. Use: ${Object.values(OrderStatus).join(', ')}.` });
         }
 
         if (sellerId !== undefined && sellerId !== null && typeof sellerId !== 'string') {

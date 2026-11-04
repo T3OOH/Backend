@@ -18,7 +18,7 @@ export const uploadMiddleware = multer({
     fileFilter: (_req, file, callback) => {
         if (!allowedMimeTypes.has(file.mimetype)) {
             return callback(
-                new Error('Formato invalido. Envie imagens ou documentos (PDF, DOC).')
+                new Error('Formato inválido. Envie imagens (JPG, PNG, WebP) ou documentos (PDF, DOC, DOCX).')
             );
         }
 
