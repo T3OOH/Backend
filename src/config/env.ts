@@ -14,6 +14,8 @@ const envSchema = z.object({
     DATABASE_URL: z.string().url(),
     // Banco local sem SSL (desenvolvimento e testes); em produção fica ligado
     DATABASE_SSL: z.enum(['true', 'false']).default('true'),
+    // Conexões simultâneas da API com o banco (o padrão do pg era 10)
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(20),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres.'),
 
     // No servidor (Render define RENDER=true) o padrão é o site oficial: o link do e-mail de senha usa este endereço

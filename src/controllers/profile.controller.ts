@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs';
+// bcrypt nativo: confere a senha fora da thread principal (o bcryptjs travava a API a cada login)
+import bcrypt from 'bcrypt';
 import { prisma } from '../database/prisma';
 import { registerSchema } from '../validators/auth.validator';
 import { passwordChangedEmail, sendMailInBackground, siteUrl } from '../services/mail.service';
