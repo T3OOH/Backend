@@ -5,7 +5,7 @@ import { isRecordNotFound } from '../lib/prismaErrors';
 
 const createBannerSchema = z.object({
     title: z.string().trim().max(160).optional(),
-    imageUrl: z.string().trim().min(1, 'A URL da imagem é obrigatória.').url('A URL da imagem é inválida.').max(1000),
+    imageUrl: z.string({ error: 'A URL da imagem é obrigatória.' }).trim().min(1, 'A URL da imagem é obrigatória.').url('A URL da imagem é inválida.').max(1000),
     // Pode ser endereço completo ou caminho do site (ex.: /catalogo)
     linkUrl: z.string().trim().max(1000).optional(),
     order: z.number().int().min(0).max(10_000).optional().default(0),

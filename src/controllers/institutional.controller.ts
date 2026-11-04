@@ -9,8 +9,8 @@ const imageUrl = z.string().trim().max(1000).optional().nullable();
 const institutionalSchema = z.object({
     team: z.array(z.object({
         id: listId,
-        name: z.string().trim().min(1, 'Informe o nome de cada pessoa da equipe.').max(120),
-        role: z.string().trim().min(1, 'Informe o cargo de cada pessoa da equipe.').max(120),
+        name: z.string({ error: 'Informe o nome de cada pessoa da equipe.' }).trim().min(1, 'Informe o nome de cada pessoa da equipe.').max(120),
+        role: z.string({ error: 'Informe o cargo de cada pessoa da equipe.' }).trim().min(1, 'Informe o cargo de cada pessoa da equipe.').max(120),
         bio: z.string().trim().max(2000).optional().default(''),
         image: imageUrl,
     }), { error: 'Envie a equipe como lista.' }).max(50, 'A equipe aceita até 50 pessoas.'),
