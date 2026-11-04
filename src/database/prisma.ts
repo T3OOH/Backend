@@ -17,6 +17,9 @@ const pool = new Pool({
     keepAlive: true,
     idleTimeoutMillis: 5 * 60_000,
     connectionTimeoutMillis: 10_000,
+    // Teste de carga (1000 usuários): com 10 conexões as rotas do banco ficavam na fila.
+    // O pooler de transação do Supabase (porta 6543) aguenta bem mais clientes que isso.
+    max: env.DATABASE_POOL_MAX,
     // Identifica a API para o gatilho de auditoria do banco (ele só registra o que vem de fora)
     application_name: 't3-api',
 });

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PanelService } from '../services/panel.service';
 import { createPanelSchema, updatePanelSchema } from '../validators/panel.validator';
+import { sendPreparedJson } from '../lib/preparedJson';
 
 const panelService = new PanelService();
 
@@ -13,19 +14,19 @@ export class PanelController {
 
     async list(req: Request, res: Response) {
         const panels = await panelService.getAllPanels(req.query);
-        return res.status(200).json(panels);
+        return sendPreparedJson(req, res, panels);
     }
 
     async mapMarkers(req: Request, res: Response) {
         const markers = await panelService.getMapMarkers();
-        return res.status(200).json(markers);
+        return sendPreparedJson(req, res, markers);
     }
 
     async getOne(req: Request, res: Response) {
         // Forçamos a conversão para string
         const id = String(req.params.id);
         const panel = await panelService.getPanelById(id);
-        return res.status(200).json(panel);
+        return sendPreparedJson(req, res, panel);
     }
 
     async update(req: Request, res: Response) {

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+// bcrypt nativo: confere a senha fora da thread principal (o bcryptjs travava a API a cada login)
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { UserRepository } from '../repositories/user.repository';

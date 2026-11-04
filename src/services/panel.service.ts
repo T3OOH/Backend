@@ -48,21 +48,27 @@ export class PanelService {
         return memoryCache.wrap(PANELS_CACHE + 'map', PANELS_TTL_MS, () => this.repository.findForMap());
     }
 
+    /** Página pública do painel: também responde da memória (só painéis que existem entram no cache). */
     async getPanelById(id: string) {
+        return memoryCache.wrap(PANELS_CACHE + 'id:' + id, PANELS_TTL_MS, () => this.findOrFail(id));
+    }
+
+    /** Leitura direta do banco, para alterações (nunca usa o cache). */
+    private async findOrFail(id: string) {
         const panel = await this.repository.findById(id);
         if (!panel) throw new Error('Painel não encontrado.');
         return panel;
     }
 
     async updatePanel(id: string, data: Prisma.PanelUpdateInput) {
-        await this.getPanelById(id);
+        await this.findOrFail(id);
         const panel = await this.repository.update(id, data);
         memoryCache.invalidate(PANELS_CACHE);
         return panel;
     }
 
     async deletePanel(id: string) {
-        await this.getPanelById(id);
+        await this.findOrFail(id);
         const removed = await this.repository.remove(id);
         memoryCache.invalidate(PANELS_CACHE);
         return removed;

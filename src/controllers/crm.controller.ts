@@ -440,39 +440,32 @@ export const crmController = {
 
             const whereClause = isRestricted ? { sellerId: userId } : {};
 
-            const openDeals = await prisma.crmDeal.findMany({
-                where: {
-                    ...whereClause,
-                    status: 'OPEN',
-                }
-            });
+            // Somado no banco: antes carregava todos os negócios (com todos os campos) só para somar
+            const [groups, totalClients] = await Promise.all([
+                prisma.crmDeal.groupBy({
+                    by: ['status', 'line'],
+                    where: { ...whereClause, status: { in: ['OPEN', 'WON'] } },
+                    _count: { _all: true },
+                    _sum: { expectedValue: true },
+                }),
+                prisma.crmClient.count({ where: whereClause }),
+            ]);
 
-            const totalExpectedValue = openDeals.reduce((acc, deal) => acc + Number(deal.expectedValue), 0);
-            const totalActiveDeals = openDeals.length;
+            const pick = (status: 'OPEN' | 'WON', line?: string) => groups
+                .filter((g) => g.status === status && (!line || g.line === line))
+                .reduce((acc, g) => ({ count: acc.count + g._count._all, value: acc.value + Number(g._sum.expectedValue ?? 0) }), { count: 0, value: 0 });
 
-            const totalClients = await prisma.crmClient.count({
-                where: whereClause
-            });
-
-            const wonDeals = await prisma.crmDeal.findMany({
-                where: {
-                    ...whereClause,
-                    status: 'WON',
-                }
-            });
-
-            const totalWonValue = wonDeals.reduce((acc, deal) => acc + Number(deal.expectedValue), 0);
+            const open = pick('OPEN');
+            const won = pick('WON');
+            const totalExpectedValue = open.value;
+            const totalActiveDeals = open.count;
+            const totalWonValue = won.value;
 
             // Separado por linha de negócio (T3 OOH e T3 Solution)
             const byLine = Object.fromEntries(DEAL_LINES.map((line) => {
-                const open = openDeals.filter((d) => d.line === line);
-                const won = wonDeals.filter((d) => d.line === line);
-                return [line, {
-                    activeDeals: open.length,
-                    expectedValue: open.reduce((acc, d) => acc + Number(d.expectedValue), 0),
-                    wonDeals: won.length,
-                    wonValue: won.reduce((acc, d) => acc + Number(d.expectedValue), 0),
-                }];
+                const o = pick('OPEN', line);
+                const w = pick('WON', line);
+                return [line, { activeDeals: o.count, expectedValue: o.value, wonDeals: w.count, wonValue: w.value }];
             }));
 
             return res.status(200).json({
