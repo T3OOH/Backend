@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DealStage, DealStatus, Role } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
+import { isRecordNotFound } from '../lib/prismaErrors';
 import { calculateQuote } from '../services/pricing.service';
 import { readAttribution } from '../lib/attribution';
 import { DEAL_LINES, SOLUTION_APPLICATIONS, SOLUTION_SERVICE_LABEL, solutionDetailsSchema } from '../lib/solution';
@@ -113,7 +114,7 @@ export const crmController = {
             return res.status(200).json(clients);
         } catch (error) {
             console.error('[CRM] GetClients Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -132,9 +133,9 @@ export const crmController = {
             return res.status(201).json(client);
         } catch (error) {
             if (error instanceof z.ZodError) {
-                return res.status(400).json({ error: 'Validation failed.', details: error.issues });
+                return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
             }
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -164,6 +165,7 @@ export const crmController = {
             if (error instanceof z.ZodError) {
                 return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
             }
+            if (isRecordNotFound(error)) return res.status(404).json({ error: 'Cliente não encontrado.' });
             console.error('[CRM] UpdateClient Error:', error);
             return res.status(500).json({ error: 'Erro ao atualizar cliente.' });
         }
@@ -192,8 +194,9 @@ export const crmController = {
 
             return res.status(204).send();
         } catch (error) {
+            if (isRecordNotFound(error)) return res.status(404).json({ error: 'Cliente não encontrado.' });
             console.error('[CRM] DeleteClient Error:', error);
-            return res.status(500).json({ error: 'Erro ao deletar cliente.' });
+            return res.status(500).json({ error: 'Erro ao excluir cliente.' });
         }
     },
 
@@ -283,7 +286,7 @@ export const crmController = {
 
             return res.status(200).json(deals);
         } catch (error) {
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -293,7 +296,7 @@ export const crmController = {
             const status = String(req.body.status) as DealStatus;
 
             if (!Object.values(DealStatus).includes(status)) {
-                return res.status(400).json({ error: 'Status inválido.' });
+                return res.status(400).json({ error: `Status inválido. Use: ${Object.values(DealStatus).join(', ')}.` });
             }
             if (!(await ensureDealAccess(req, res, id))) return;
 
@@ -305,7 +308,7 @@ export const crmController = {
             return res.status(200).json(deal);
         } catch (error) {
             console.error('[CRM] UpdateDealStatus Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -383,13 +386,13 @@ export const crmController = {
             return res.status(201).json(deal);
         } catch (error) {
             if (error instanceof z.ZodError) {
-                return res.status(400).json({ error: 'Validation failed.', details: error.issues });
+                return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
             }
             // Cliente já atendido por outro comercial
             if ((error as any)?.status === 409) {
                 return res.status(409).json({ error: (error as Error).message });
             }
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -407,7 +410,7 @@ export const crmController = {
             return res.status(200).json(users);
         } catch (error) {
             console.error('[CRM] GetSiteClients Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -417,7 +420,7 @@ export const crmController = {
             const stage = String(req.body.stage) as DealStage;
 
             if (!Object.values(DealStage).includes(stage)) {
-                return res.status(400).json({ error: 'Etapa inválida.' });
+                return res.status(400).json({ error: `Etapa inválida. Use: ${Object.values(DealStage).join(', ')}.` });
             }
             if (!(await ensureDealAccess(req, res, id))) return;
 
@@ -429,7 +432,7 @@ export const crmController = {
             return res.status(200).json(deal);
         } catch (error) {
             console.error('[CRM] UpdateDeal Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -478,7 +481,7 @@ export const crmController = {
 
         } catch (error) {
             console.error('[CRM] GetMetrics Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -618,7 +621,7 @@ export const crmController = {
                 }
 
                 let client = await tx.crmClient.findFirst({
-                    where: { email: clientDetails.email }
+                    where: { email: { equals: clientDetails.email, mode: 'insensitive' } }
                 });
 
                 if (!client) {

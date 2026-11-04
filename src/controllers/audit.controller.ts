@@ -27,7 +27,7 @@ export const auditController = {
     /** Lista com filtros e busca (Gestão > Registros). */
     async list(req: Request, res: Response) {
         const parsed = listQuery.safeParse(req.query);
-        if (!parsed.success) return res.status(400).json({ error: 'Filtros inválidos.' });
+        if (!parsed.success) return res.status(400).json({ error: 'Filtros inválidos.', details: parsed.error.issues });
         const { level, source, entity, q, days, page, pageSize } = parsed.data;
 
         const contains = (v: string) => ({ contains: v, mode: 'insensitive' as const });
@@ -57,7 +57,7 @@ export const auditController = {
             });
         } catch (error) {
             console.error('[Audit] list Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
@@ -73,14 +73,14 @@ export const auditController = {
             return res.json({ entities: entities.map((e) => ({ entity: e.entity, count: e._count._all })) });
         } catch (error) {
             console.error('[Audit] facets Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 
     /** Público: erro que aconteceu no navegador. Devolve o código para o cliente mandar ao suporte. */
     async clientError(req: Request, res: Response) {
         const parsed = clientErrorSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Erro inválido.' });
+        if (!parsed.success) return res.status(400).json({ error: 'Erro inválido.', details: parsed.error.issues });
         const { message, stack, url, userAgent, kind } = parsed.data;
 
         // Autor opcional: quem está logado aparece no registro
@@ -108,7 +108,7 @@ export const auditController = {
             return res.status(201).json({ id: row.id });
         } catch (error) {
             console.error('[Audit] clientError Error:', error);
-            return res.status(500).json({ error: 'Internal server error.' });
+            return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
     },
 };

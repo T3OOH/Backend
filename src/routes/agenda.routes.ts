@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../database/prisma';
+import { isRecordNotFound } from '../lib/prismaErrors';
 import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
 export const agendaRoutes = Router();
@@ -18,7 +19,13 @@ const taskSchema = z.object({
     type: z.enum(TASK_TYPES).default('task'),
 });
 
-const statusSchema = z.object({ status: z.enum(TASK_STATUSES) });
+const statusSchema = z.object({ status: z.enum(TASK_STATUSES, { error: 'Status inválido (use pending ou completed).' }) });
+
+const notFoundOr500 = (res: import('express').Response, error: unknown) => {
+    if (isRecordNotFound(error)) return res.status(404).json({ error: 'Tarefa não encontrada.' });
+    console.error('[Agenda]', error);
+    return res.status(500).json({ error: 'Erro ao salvar a tarefa.' });
+};
 
 const invalid = (res: import('express').Response, error: z.ZodError) =>
     res.status(400).json({ error: error.issues[0]?.message ?? 'Dados inválidos.', details: error.issues });
@@ -31,7 +38,7 @@ agendaRoutes.get('/', async (req, res) => {
         });
         return res.json(tasks);
     } catch (error) {
-        return res.status(500).json({ error: 'Erro ao buscar tarefas' });
+        return res.status(500).json({ error: 'Erro ao buscar tarefas.' });
     }
 });
 
@@ -44,7 +51,7 @@ agendaRoutes.post('/', async (req, res) => {
         const task = await prisma.agendaTask.create({ data: { ...rest, date: new Date(date) } });
         return res.status(201).json(task);
     } catch (error) {
-        return res.status(500).json({ error: 'Erro ao criar tarefa' });
+        return res.status(500).json({ error: 'Erro ao criar tarefa.' });
     }
 });
 
@@ -57,7 +64,7 @@ agendaRoutes.put('/:id', async (req, res) => {
         const task = await prisma.agendaTask.update({ where: { id: req.params.id }, data: { ...rest, date: new Date(date) } });
         return res.json(task);
     } catch (error) {
-        return res.status(404).json({ error: 'Tarefa não encontrada' });
+        return notFoundOr500(res, error);
     }
 });
 
@@ -72,7 +79,7 @@ agendaRoutes.patch('/:id/toggle', async (req, res) => {
         });
         return res.json(task);
     } catch (error) {
-        return res.status(404).json({ error: 'Tarefa não encontrada' });
+        return notFoundOr500(res, error);
     }
 });
 
@@ -82,6 +89,6 @@ agendaRoutes.delete('/:id', async (req, res) => {
         await prisma.agendaTask.delete({ where: { id: req.params.id } });
         return res.status(204).end();
     } catch (error) {
-        return res.status(404).json({ error: 'Tarefa não encontrada' });
+        return notFoundOr500(res, error);
     }
 });

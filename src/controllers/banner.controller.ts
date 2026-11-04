@@ -1,14 +1,16 @@
 import { Request, Response } from 'express';
 import { prisma } from '../database/prisma';
 import { z, ZodError } from 'zod';
+import { isRecordNotFound } from '../lib/prismaErrors';
 
 const createBannerSchema = z.object({
-    title: z.string().optional(),
-    imageUrl: z.string().min(1, 'A URL da imagem é obrigatória.'),
-    linkUrl: z.string().optional(),
-    order: z.number().int().optional().default(0),
+    title: z.string().trim().max(160).optional(),
+    imageUrl: z.string().trim().min(1, 'A URL da imagem é obrigatória.').url('A URL da imagem é inválida.').max(1000),
+    // Pode ser endereço completo ou caminho do site (ex.: /catalogo)
+    linkUrl: z.string().trim().max(1000).optional(),
+    order: z.number().int().min(0).max(10_000).optional().default(0),
     isActive: z.boolean().optional().default(true),
-});
+}).strict();
 
 export const bannerController = {
     async listActive(req: Request, res: Response) {
@@ -32,7 +34,7 @@ export const bannerController = {
             return res.json(banners);
         } catch (error) {
             console.error('[Banner] Erro ao listar todos:', error);
-            return res.status(500).json({ error: 'Erro interno.' });
+            return res.status(500).json({ error: 'Erro interno ao listar banners.' });
         }
     },
 
@@ -60,8 +62,9 @@ export const bannerController = {
             return res.status(201).json(newBanner);
         } catch (error) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
+                return res.status(400).json({ error: error.issues[0]?.message ?? 'Dados inválidos.', details: error.issues });
             }
+            console.error('[Banner] Erro ao criar:', error);
             return res.status(500).json({ error: 'Erro interno ao criar banner.' });
         }
     },
@@ -78,7 +81,9 @@ export const bannerController = {
             
             return res.status(204).send();
         } catch (error) {
-            return res.status(500).json({ error: 'Erro ao deletar banner.' });
+            if (isRecordNotFound(error)) return res.status(404).json({ error: 'Banner não encontrado.' });
+            console.error('[Banner] Erro ao excluir:', error);
+            return res.status(500).json({ error: 'Erro ao excluir banner.' });
         }
     }
 };
