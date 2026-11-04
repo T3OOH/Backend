@@ -54,6 +54,11 @@ const envSchema = z.object({
         return z.NEVER;
     }),
     DESKTOP_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('T3OOH/AppT3'),
+    // T3 Launcher: senha da área de download do site (só no servidor, nunca no frontend).
+    // Sem ela, o download do launcher fica desligado
+    LAUNCHER_DOWNLOAD_PASSWORD: z.string().min(6).optional(),
+    // Release do GitHub (tag) com o zip do launcher, separada das versões do T3 Gestor
+    LAUNCHER_RELEASE_TAG: z.string().regex(/^[\w.-]+$/).default('launcher'),
 });
 
 const result = envSchema.safeParse(source);
