@@ -2,11 +2,11 @@ import { Resend } from 'resend';
 import { env } from '../config/env';
 
 /*
- * E-mails transacionais (Resend). O remetente padrão é do domínio verificado t3ooh.com.
+ * E-mails transacionais (Resend). O remetente padrão é do domínio verificado t3led.com.br.
  * O SDK do Resend devolve { error } em vez de lançar: aqui o erro vira exceção.
  */
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-export const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3ooh.com>';
+export const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3led.com.br>';
 export const mailEnabled = Boolean(resend);
 
 const SITE = () => env.FRONTEND_URL.replace(/\/$/, '');
