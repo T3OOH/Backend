@@ -1,0 +1,17 @@
+name: Produção
+
+# Depois do merge na main o Render publica sozinho; aqui só conferimos se o deploy novo subiu.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  producao:
+    uses: T3OOH/.github/.github/workflows/verificar-producao.yml@main
+    with:
+      health-url: https://api.t3led.com.br/health
+      urls: |
+        https://api.t3led.com.br/panels

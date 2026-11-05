@@ -227,7 +227,8 @@ const analyticsLimiter = rateLimit({
 /**
  * Route Registrations.
  */
-app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
+// "commit" vem do Render (RENDER_GIT_COMMIT): o workflow "Produção" espera o deploy novo por ele
+app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', commit: process.env.RENDER_GIT_COMMIT ?? null }));
 
 app.use(apiLimiter);
 app.use('/auth/login', loginLimiter);
