@@ -164,3 +164,25 @@ export function solutionRequestEmail(name: string, protocol: string, details: [s
 }
 
 export const siteUrl = SITE;
+
+/**
+ * Boas-vindas da caixa @t3led.com.br nova, enviada para o e-mail pessoal da pessoa.
+ * Leva o endereço e a senha inicial (aleatória, só desta caixa) e explica como trocar.
+ */
+export function mailboxWelcomeEmail(name: string, address: string, password: string, webmailUrl: string) {
+    return brandEmail({
+        eyebrow: 'E-mail corporativo',
+        title: 'Seu e-mail da T3 está pronto',
+        paragraphs: [
+            `${esc(firstName(name))}, criamos o seu e-mail corporativo da T3. Use os dados abaixo para entrar no webmail.`,
+            '<strong style="color:#ECECEE;">Troque a senha no primeiro acesso:</strong> no webmail, abra <em>Configurações → Senha</em> e crie uma senha só sua. Não compartilhe a senha inicial.',
+        ],
+        details: [
+            ['E-mail', address],
+            ['Senha inicial', password],
+            ['Webmail', webmailUrl],
+        ],
+        button: { label: 'Abrir o webmail', url: webmailUrl },
+        footnote: 'Não esperava este e-mail? Avise a gestão da T3 para desativarmos a caixa.',
+    });
+}
