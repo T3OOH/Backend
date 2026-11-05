@@ -162,6 +162,8 @@ Ambas as tabelas apagam em cascata com o usuário.
 |---|---|
 | `JWT_SECRET` | Assina tokens de acesso, de redefinição e de "Não fui eu" (32+ caracteres). |
 | `RESEND_API_KEY` | E-mails de novo acesso, senha alterada e recuperação. Sem ela, o login funciona mas os e-mails não saem; há aviso no log ao subir. |
+| `HOSTINGER_API_TOKEN` | Opcional. Token da API da Hostinger (hPanel → Perfil → API). Liga a criação de caixas @t3led.com.br pelo app (`/mail-accounts`). |
+| `HOSTINGER_MAIL_ORDER_ID` | Opcional. ID do pedido de e-mail; sem ele o backend acha pelo domínio (`MAIL_DOMAIN`, padrão `t3led.com.br`). |
 | `RESEND_FROM` | Opcional. O padrão é `T3 OOH <nao-responda@t3led.com.br>`, domínio verificado no Resend. |
 | `FRONTEND_URL` | Base dos links dos e-mails. No Render, o padrão é `https://t3led.com.br`. |
 

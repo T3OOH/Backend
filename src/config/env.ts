@@ -54,6 +54,11 @@ const envSchema = z.object({
         return z.NEVER;
     }),
     DESKTOP_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('T3OOH/AppT3'),
+    // Caixas de e-mail da equipe (Hostinger). Sem o token, a criação de contas fica desligada.
+    // Token: hPanel → Perfil → API. O pedido de e-mail é achado pelo domínio quando o ID não vem.
+    HOSTINGER_API_TOKEN: z.string().min(10).optional(),
+    HOSTINGER_MAIL_ORDER_ID: z.string().optional(),
+    MAIL_DOMAIN: z.string().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/).default('t3led.com.br'),
     // T3 Launcher: senha da área de download do site (só no servidor, nunca no frontend).
     // Sem ela, o download do launcher fica desligado
     LAUNCHER_DOWNLOAD_PASSWORD: z.string().min(6).optional(),
