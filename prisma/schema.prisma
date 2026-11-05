@@ -83,6 +83,7 @@ model Panel {
   images      String[]
   categoryId  String?
   impacts     String // Tráfego estimado / Impressões
+  playbackSeconds Int? // Tempo de reprodução de cada inserção, em segundos
   lat         Float
   lng         Float
   px          String // Resolução em pixels

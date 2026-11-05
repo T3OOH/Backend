@@ -8,6 +8,8 @@ export const createPanelSchema = z.object({
     size: z.string().trim().min(1, 'O tamanho é obrigatório.').max(80),
     px: z.string().trim().min(1, 'A resolução é obrigatória.').max(80),
     impacts: z.string().trim().min(1, 'Os impactos são obrigatórios.').max(80),
+    // Tempo de reprodução de cada inserção, em segundos (opcional; null apaga)
+    playbackSeconds: z.number().int('Use segundos inteiros.').min(1, 'O tempo de reprodução é de pelo menos 1 segundo.').max(3600, 'O tempo de reprodução vai até 3600 segundos.').nullable().optional(),
     price: z.number().nonnegative('O valor não pode ser negativo').nullable().optional(),
     status: z.nativeEnum(PanelStatus).default(PanelStatus.AVAILABLE),
     description: z.string().trim().max(3000).optional(),

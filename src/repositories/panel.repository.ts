@@ -36,6 +36,7 @@ export class PanelRepository {
                 impacts: true,
                 size: true,
                 px: true,
+                playbackSeconds: true,
             },
         });
     }
