@@ -16,5 +16,5 @@ jobs:
     steps:
       - name: Health e painéis
         run: |
-          curl -fsS --max-time 90 -o /dev/null -w "health %{http_code} %{time_total}s\n" https://backend-2go8.onrender.com/health
-          curl -fsS --max-time 60 -o /dev/null -w "panels %{http_code} %{time_total}s\n" https://backend-2go8.onrender.com/panels
+          curl -fsS --max-time 90 -o /dev/null -w "health %{http_code} %{time_total}s\n" https://api.t3led.com.br/health
+          curl -fsS --max-time 60 -o /dev/null -w "panels %{http_code} %{time_total}s\n" https://api.t3led.com.br/panels
