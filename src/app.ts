@@ -97,6 +97,8 @@ app.use(helmet({
                 "'self'", 
                 "http://localhost:3000", 
                 "http://localhost:5173", 
+                "https://t3led.com.br", 
+                "https://www.t3led.com.br", 
                 "https://t3ooh.com", 
                 "https://www.t3ooh.com", 
                 env.FRONTEND_URL

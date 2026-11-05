@@ -97,7 +97,7 @@ export const auditController = {
             const row = await prisma.auditLog.create({
                 data: {
                     level: 'error', source: 'client', action: 'error',
-                    summary: `Erro no site${url ? ` em ${new URL(url, 'https://t3ooh.com').pathname}` : ''}: ${message}`.slice(0, 500),
+                    summary: `Erro no site${url ? ` em ${new URL(url, 'https://t3led.com.br').pathname}` : ''}: ${message}`.slice(0, 500),
                     changes: { kind, stack: stack ?? null, url: url ?? null, userAgent: userAgent ?? req.get('user-agent') ?? null },
                     actorId: actor?.id ?? null, actorRole: actor?.role ?? null,
                     actorName: actor ? (await prisma.user.findUnique({ where: { id: actor.id }, select: { name: true } }))?.name ?? null : null,
