@@ -162,7 +162,7 @@ Ambas as tabelas apagam em cascata com o usuário.
 |---|---|
 | `JWT_SECRET` | Assina tokens de acesso, de redefinição e de "Não fui eu" (32+ caracteres). |
 | `RESEND_API_KEY` | E-mails de novo acesso, senha alterada e recuperação. Sem ela, o login funciona mas os e-mails não saem; há aviso no log ao subir. |
-| `RESEND_FROM` | Opcional. O padrão é `T3 OOH <nao-responda@t3ooh.com>`, domínio verificado no Resend. |
+| `RESEND_FROM` | Opcional. O padrão é `T3 OOH <nao-responda@t3led.com.br>`, domínio verificado no Resend. |
 | `FRONTEND_URL` | Base dos links dos e-mails. No Render, o padrão é `https://t3led.com.br`. |
 
 ## 10. Operação e resposta a incidentes
@@ -203,7 +203,7 @@ select type, count(*) from security_events where "createdAt" > now() - interval 
   - rotação a cada uso, com detecção de reuso;
   - sessões que podem ser encerradas a qualquer momento;
   - alerta de aparelho novo.
-- **Próximo passo recomendado:** apontar `api.t3ooh.com` para o Render (CNAME na Vercel) e mover o refresh token para um cookie `httpOnly; Secure; SameSite=Lax`. Assim, um script injetado no site não consegue lê-lo.
+- **Próximo passo recomendado:** (feito: `api.t3led.com.br` aponta para o Render via CNAME na Hostinger) mover o refresh token para um cookie `httpOnly; Secure; SameSite=Lax`. Assim, um script injetado no site não consegue lê-lo.
 - **Também recomendado:**
   - **2FA** (código por app autenticador) para gestores e comercial;
   - **CSP** no site (`vercel.json` → headers);
