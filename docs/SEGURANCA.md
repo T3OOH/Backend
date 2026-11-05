@@ -163,7 +163,7 @@ Ambas as tabelas apagam em cascata com o usuário.
 | `JWT_SECRET` | Assina tokens de acesso, de redefinição e de "Não fui eu" (32+ caracteres). |
 | `RESEND_API_KEY` | E-mails de novo acesso, senha alterada e recuperação. Sem ela, o login funciona mas os e-mails não saem; há aviso no log ao subir. |
 | `RESEND_FROM` | Opcional. O padrão é `T3 OOH <nao-responda@t3ooh.com>`, domínio verificado no Resend. |
-| `FRONTEND_URL` | Base dos links dos e-mails. No Render, o padrão é `https://t3ooh.com`. |
+| `FRONTEND_URL` | Base dos links dos e-mails. No Render, o padrão é `https://t3led.com.br`. |
 
 ## 10. Operação e resposta a incidentes
 

@@ -27,7 +27,7 @@ const envSchema = z.object({
 
     // No servidor (Render define RENDER=true) o padrão é o site oficial: o link do e-mail de senha usa este endereço
     FRONTEND_URL: z.string().url().default(
-        process.env.RENDER || process.env.NODE_ENV === 'production' ? 'https://t3ooh.com' : 'http://localhost:3000',
+        process.env.RENDER || process.env.NODE_ENV === 'production' ? 'https://t3led.com.br' : 'http://localhost:3000',
     ),
     CORS_ORIGINS: z.string().optional(),
 
@@ -77,6 +77,8 @@ export const env = result.data;
 const allowedOrigins = new Set(
     [
         env.FRONTEND_URL,
+        'https://t3led.com.br',
+        'https://www.t3led.com.br',
         'https://t3ooh.com',
         'https://www.t3ooh.com',
         ...(env.CORS_ORIGINS?.split(',') ?? []),
