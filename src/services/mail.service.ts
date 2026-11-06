@@ -6,7 +6,7 @@ import { env } from '../config/env';
  * O SDK do Resend devolve { error } em vez de lançar: aqui o erro vira exceção.
  */
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-export const EMAIL_FROM = process.env.RESEND_FROM || 'T3 OOH <nao-responda@t3led.com.br>';
+export const EMAIL_FROM = process.env.RESEND_FROM || 'T3 LED <nao-responda@t3led.com.br>';
 export const mailEnabled = Boolean(resend);
 
 const SITE = () => env.FRONTEND_URL.replace(/\/$/, '');
@@ -27,7 +27,14 @@ interface BrandEmail {
     footnote?: string;
 }
 
-/** Layout padrão do site: tabelas e estilos inline para funcionar em clientes de e-mail. */
+/** Logo em PNG (WebP não aparece no Outlook), publicada pelo site em /email (T3OOH/Frontend). */
+const LOGO_URL = 'https://t3led.com.br/email/t3-logo-claro.png';
+const SITE_PUBLICO = 'https://t3led.com.br';
+
+/**
+ * Layout padrão da T3 LED: tabelas e estilos inline para funcionar em clientes de e-mail.
+ * Fundo escuro, laranja da marca (#FF5E00) só no destaque, logo em imagem com a palavra LED.
+ */
 function brandEmail({ eyebrow, title, paragraphs, details, button, footnote }: BrandEmail) {
     const detailRows = details?.length
         ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #2A2A2E;">
@@ -40,13 +47,22 @@ ${details.map(([k, v]) => `<tr><td style="padding:10px 14px;border-bottom:1px so
         </td></tr></table>
         <p style="margin:24px 0 0;font-size:13px;color:#8E8E93;">Se o botão não abrir, copie este endereço no navegador:<br><a href="${button.url}" style="color:#FF5E00;word-break:break-all;">${button.url}</a></p>`
         : '';
+    const strip = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    // Resumo mostrado na caixa de entrada: o primeiro parágrafo, sem HTML
+    const preheader = strip(paragraphs[0] ?? title).slice(0, 140);
     const html = `<!doctype html>
-<html lang="pt-BR"><body style="margin:0;padding:0;background:#0B0B0C;">
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="supported-color-schemes" content="dark light"><title>${esc(title)} · T3 LED</title></head>
+<body style="margin:0;padding:0;background:#0B0B0C;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0B0B0C;">${esc(preheader)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0C;padding:32px 16px;">
   <tr><td align="center">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#111113;border:1px solid #2A2A2E;">
-      <tr><td style="padding:28px 32px;border-bottom:1px solid #2A2A2E;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#ECECEE;">
-        t<span style="color:#FF5E00;">3</span> <span style="font-size:11px;letter-spacing:3px;color:#8E8E93;font-weight:normal;">OOH</span>
+      <tr><td style="height:4px;background:#FF5E00;font-size:0;line-height:0;">&nbsp;</td></tr>
+      <tr><td style="padding:24px 32px;border-bottom:1px solid #2A2A2E;">
+        <a href="${SITE_PUBLICO}" style="text-decoration:none;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:middle;"><img src="${LOGO_URL}" width="36" height="39" alt="T3 LED" style="display:block;border:0;outline:none;"></td>
+          <td style="vertical-align:middle;padding-left:12px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;letter-spacing:4px;color:#ECECEE;">LED</td>
+        </tr></table></a>
       </td></tr>
       <tr><td style="padding:32px;font-family:Arial,Helvetica,sans-serif;color:#B4B4B9;font-size:15px;line-height:1.6;">
         <p style="margin:0 0 8px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#8E8E93;">${esc(eyebrow)}</p>
@@ -56,19 +72,23 @@ ${details.map(([k, v]) => `<tr><td style="padding:10px 14px;border-bottom:1px so
         ${cta}
         ${footnote ? `<p style="margin:24px 0 0;font-size:13px;color:#8E8E93;">${footnote}</p>` : ''}
       </td></tr>
-      <tr><td style="padding:20px 32px;border-top:1px solid #2A2A2E;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6E6E73;">T3 OOH · Mídia exterior em Goiânia e região</td></tr>
+      <tr><td style="padding:20px 32px;border-top:1px solid #2A2A2E;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6E6E73;">
+        <strong style="color:#B4B4B9;">T3 LED</strong> · Painéis de LED e mídia exterior · Goiânia - GO<br>
+        <a href="${SITE_PUBLICO}" style="color:#FF5E00;text-decoration:none;">t3led.com.br</a>
+      </td></tr>
     </table>
   </td></tr>
 </table>
 </body></html>`;
-    const strip = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
     const text = [
-        `${title} - T3 OOH`,
+        `${title} - T3 LED`,
         '',
         ...paragraphs.map(strip),
         ...(details?.length ? ['', ...details.map(([k, v]) => `${k}: ${v}`)] : []),
         ...(button ? ['', `${button.label}: ${button.url}`] : []),
         ...(footnote ? ['', strip(footnote)] : []),
+        '',
+        'T3 LED · Painéis de LED e mídia exterior · Goiânia - GO · t3led.com.br',
     ].join('\n');
     return { html, text };
 }
@@ -93,7 +113,7 @@ export function resetEmail(name: string, link: string) {
     return brandEmail({
         eyebrow: 'Recuperação de senha',
         title: 'Crie uma nova senha',
-        paragraphs: [`${esc(firstName(name))}, recebemos um pedido para redefinir a senha da sua conta na T3 OOH. O link vale por <strong style="color:#ECECEE;">15 minutos</strong> e funciona uma única vez.`],
+        paragraphs: [`${esc(firstName(name))}, recebemos um pedido para redefinir a senha da sua conta na T3 LED. O link vale por <strong style="color:#ECECEE;">15 minutos</strong> e funciona uma única vez.`],
         button: { label: 'Criar nova senha', url: link },
         footnote: 'Não pediu? Ignore este e-mail: sua senha continua a mesma.',
     });
@@ -115,7 +135,7 @@ export function newDeviceEmail(name: string, info: AccessInfo, reportLink: strin
         eyebrow: 'Segurança da conta',
         title: 'Novo acesso à sua conta',
         paragraphs: [
-            `${esc(firstName(name))}, sua conta na T3 OOH foi acessada em um aparelho que ainda não tínhamos visto.`,
+            `${esc(firstName(name))}, sua conta na T3 LED foi acessada em um aparelho que ainda não tínhamos visto.`,
             'Se foi você, não precisa fazer nada.',
             '<strong style="color:#ECECEE;">Não foi você?</strong> Use o botão abaixo: encerramos o acesso em todos os aparelhos e você cria uma senha nova na hora.',
         ],
@@ -136,7 +156,7 @@ export function passwordChangedEmail(name: string, info: { when: Date; device: s
         eyebrow: 'Segurança da conta',
         title: 'Sua senha foi alterada',
         paragraphs: [
-            `${esc(firstName(name))}, a senha da sua conta na T3 OOH acabou de ser alterada. Por segurança, os outros aparelhos conectados foram desconectados.`,
+            `${esc(firstName(name))}, a senha da sua conta na T3 LED acabou de ser alterada. Por segurança, os outros aparelhos conectados foram desconectados.`,
             '<strong style="color:#ECECEE;">Não foi você?</strong> Crie uma nova senha agora pelo botão abaixo e fale com o comercial da T3.',
         ],
         details: [
@@ -172,9 +192,9 @@ export const siteUrl = SITE;
 export function mailboxWelcomeEmail(name: string, address: string, password: string, webmailUrl: string) {
     return brandEmail({
         eyebrow: 'E-mail corporativo',
-        title: 'Seu e-mail da T3 está pronto',
+        title: 'Seu e-mail da T3 LED está pronto',
         paragraphs: [
-            `${esc(firstName(name))}, criamos o seu e-mail corporativo da T3. Use os dados abaixo para entrar no webmail.`,
+            `${esc(firstName(name))}, criamos o seu e-mail corporativo da T3 LED. Use os dados abaixo para entrar no webmail.`,
             '<strong style="color:#ECECEE;">Troque a senha no primeiro acesso:</strong> no webmail, abra <em>Configurações → Senha</em> e crie uma senha só sua. Não compartilhe a senha inicial.',
         ],
         details: [
@@ -183,6 +203,6 @@ export function mailboxWelcomeEmail(name: string, address: string, password: str
             ['Webmail', webmailUrl],
         ],
         button: { label: 'Abrir o webmail', url: webmailUrl },
-        footnote: 'Não esperava este e-mail? Avise a gestão da T3 para desativarmos a caixa.',
+        footnote: `Monte também a sua assinatura no padrão da T3 LED em <a href="${SITE_PUBLICO}/assinatura" style="color:#FF5E00;">t3led.com.br/assinatura</a> e cole no webmail em <em>Configurações → Assinatura</em>. Não esperava este e-mail? Avise a gestão da T3 para desativarmos a caixa.`,
     });
 }
