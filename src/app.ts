@@ -30,6 +30,7 @@ import { reportsRoutes } from './routes/reports.routes';
 import { auditRoutes } from './routes/audit.routes';
 import { downloadsRoutes } from './routes/downloads.routes';
 import { meetingRoutes } from './routes/meeting.routes';
+import { mcpRoutes } from './routes/mcp.routes';
 import { requestContext } from './lib/requestContext';
 import { recordRequestError } from './services/audit.service';
 
@@ -108,6 +109,12 @@ app.use(helmet({
     },
 }));
 app.disable('x-powered-by');
+
+/**
+ * Servidor MCP público (assistentes de IA): aberto a qualquer origem e com limite próprio,
+ * por isso fica antes do CORS restrito ao site. Só leitura de dados públicos.
+ */
+app.use('/mcp', mcpRoutes);
 
 /**
  * Cross-Origin Resource Sharing (CORS) Configuration.
