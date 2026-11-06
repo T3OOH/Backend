@@ -62,6 +62,10 @@ const envSchema = z.object({
     // T3 Launcher: senha da área de download do site (só no servidor, nunca no frontend).
     // Sem ela, o download do launcher fica desligado
     LAUNCHER_DOWNLOAD_PASSWORD: z.string().min(6).optional(),
+    // IA T3 (balão de dúvidas): sem a chave, o balão funciona só com respostas prontas e encaminhamento
+    ANTHROPIC_API_KEY: z.string().min(20).optional(),
+    // Pedidos técnicos do balão vão para este e-mail (sem ele, para os administradores)
+    SUPORTE_TECNICO_EMAIL: z.string().email().optional(),
     // Release do GitHub (tag) com o zip do launcher, separada das versões do T3 Gestor
     LAUNCHER_RELEASE_TAG: z.string().regex(/^[\w.-]+$/).default('launcher'),
 });

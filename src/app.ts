@@ -32,6 +32,7 @@ import { downloadsRoutes } from './routes/downloads.routes';
 import { meetingRoutes } from './routes/meeting.routes';
 import { mcpRoutes } from './routes/mcp.routes';
 import { localidadesRoutes } from './routes/localidades.routes';
+import { assistenteRoutes } from './routes/assistente.routes';
 import { requestContext } from './lib/requestContext';
 import { recordRequestError } from './services/audit.service';
 
@@ -261,6 +262,7 @@ app.use('/downloads', downloadsRoutes);
 app.use('/contacts', contactRoutes);
 app.use('/panels', panelRoutes);
 app.use('/localidades', localidadesRoutes);
+app.use('/assistente', assistenteRoutes);
 app.use('/banners', bannerRoutes); 
 app.use('/solution', solutionRoutes);
 app.use('/institutional', institutionalRoutes); 
