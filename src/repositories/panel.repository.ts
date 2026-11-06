@@ -33,6 +33,7 @@ export class PanelRepository {
                 state: true,
                 status: true,
                 images: true,
+                imageFocus: true,
                 impacts: true,
                 size: true,
                 px: true,
