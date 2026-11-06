@@ -27,6 +27,13 @@ const panelBaseSchema = z.object({
         objetos: z.array(z.string().max(40)).max(30).optional(),
         // Pino marcado à mão em cima do telão (edição): a IA procura o telão em volta dele
         pino: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).strict().optional(),
+        // Recorte da capa nos cards (retângulo em % da foto, desenhado no cadastro)
+        corte: z.object({
+            x: z.number().min(0).max(100),
+            y: z.number().min(0).max(100),
+            w: z.number().min(5).max(100),
+            h: z.number().min(5).max(100),
+        }).strict().refine((c) => c.x + c.w <= 100.5 && c.y + c.h <= 100.5, 'O recorte precisa ficar dentro da foto.').optional(),
     }).strict()).nullable().optional()
         // null apaga os focos (o Prisma pede JsonNull em campo JSON)
         .transform((v) => (v === null ? Prisma.JsonNull : v)),
