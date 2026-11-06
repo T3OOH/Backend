@@ -1,4 +1,4 @@
-import { PanelStatus } from '@prisma/client';
+import { PanelStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { padronizarLocal } from '../lib/localidades';
 
@@ -19,6 +19,15 @@ const panelBaseSchema = z.object({
     state: z.string().trim().max(100).optional(),
     categoryId: z.string().uuid().optional(),
     images: z.array(z.string().url()).max(8).default([]),
+    // Foco de cada foto (0-100% na horizontal e na vertical): os cards centralizam o telão e o movimento
+    imageFocus: z.record(z.string().url(), z.object({
+        x: z.number().min(0).max(100),
+        y: z.number().min(0).max(100),
+        fonte: z.enum(['auto', 'manual']),
+        objetos: z.array(z.string().max(40)).max(30).optional(),
+    }).strict()).nullable().optional()
+        // null apaga os focos (o Prisma pede JsonNull em campo JSON)
+        .transform((v) => (v === null ? Prisma.JsonNull : v)),
 }).strict();
 
 // Cidade e UF saem padronizadas pela lista do IBGE (grafia oficial e UF preenchida)

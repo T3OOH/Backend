@@ -84,6 +84,7 @@ model Panel {
   categoryId  String?
   impacts     String // Tráfego estimado / Impressões
   playbackSeconds Int? // Tempo de reprodução de cada inserção, em segundos
+  imageFocus  Json? // Foco de cada foto: { "<url>": { x: 0-100, y: 0-100, fonte: "auto" | "manual" } }
   lat         Float
   lng         Float
   px          String // Resolução em pixels
@@ -233,11 +234,30 @@ model CrmDeal {
 
   items    CrmDealItem[]
   messages CrmMessage[]
+  // Histórico do funil (gatilho crm_deal_event no banco): base dos indicadores e SLAs
+  events   CrmDealEvent[]
 
   @@index([clientId])
   @@index([sellerId])
   @@index([line])
   @@map("crm_deals")
+}
+
+/// Mudança de etapa, status ou responsável de um negócio. Gravado por gatilho no banco
+/// (migração 20261106000000_indicadores_processos), nunca pela API.
+model CrmDealEvent {
+  id        String   @id @default(uuid())
+  dealId    String
+  deal      CrmDeal  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  /// CREATED | STAGE | STATUS | SELLER
+  type      String
+  fromValue String?
+  toValue   String?
+  createdAt DateTime @default(now())
+
+  @@index([dealId, createdAt])
+  @@index([type, createdAt])
+  @@map("crm_deal_events")
 }
 
 /// Pontos (Painéis) vinculados a uma oportunidade do CRM.
