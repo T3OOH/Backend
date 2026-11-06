@@ -37,6 +37,9 @@ export const updatePanelSchema = panelBaseSchema
     .partial()
     .extend({
         status: z.nativeEnum(PanelStatus).optional(),
+        // Sem padrão na edição: "images" ausente mantém as fotos. Com .default([]) do cadastro,
+        // uma edição parcial (ex.: só imageFocus) apagava todas as fotos do painel.
+        images: z.array(z.string().url()).max(8).optional(),
     })
     .strict()
     .transform(padronizarLocal);
