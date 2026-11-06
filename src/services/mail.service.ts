@@ -183,6 +183,29 @@ export function solutionRequestEmail(name: string, protocol: string, details: [s
     });
 }
 
+/** Pedido do balão de dúvidas (IA T3) para a gestão ou o suporte técnico. */
+export function assistenteEquipeEmail(d: {
+    destino: string; protocolo: string; tema: string; nome: string; telefone: string;
+    email?: string; empresa?: string; motivo?: string; conversa: string;
+}) {
+    const detalhes: [string, string][] = [
+        ['Protocolo', `#${d.protocolo}`], ['Assunto', d.tema], ['Nome', d.nome], ['WhatsApp', d.telefone],
+        ...(d.email ? [['E-mail', d.email] as [string, string]] : []),
+        ...(d.empresa ? [['Empresa', d.empresa] as [string, string]] : []),
+        ...(d.motivo ? [['Motivo', d.motivo] as [string, string]] : []),
+    ];
+    return brandEmail({
+        eyebrow: `IA T3 · ${d.destino}`,
+        title: 'Novo pedido pelo site',
+        paragraphs: [
+            `${esc(d.nome)} pediu atendimento pelo balão de dúvidas do site. Responda pelo WhatsApp ou e-mail informados.`,
+            esc(d.conversa).split('\n').join('<br>'),
+        ],
+        details: detalhes,
+        footnote: 'A conversa fica registrada nos contatos do site (Gestão).',
+    });
+}
+
 export const siteUrl = SITE;
 
 /**
