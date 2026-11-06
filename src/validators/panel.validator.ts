@@ -1,7 +1,8 @@
 import { PanelStatus } from '@prisma/client';
 import { z } from 'zod';
+import { padronizarLocal } from '../lib/localidades';
 
-export const createPanelSchema = z.object({
+const panelBaseSchema = z.object({
     name: z.string().trim().min(1, 'O nome é obrigatório.').max(160),
     lat: z.number().gte(-90).lte(90),
     lng: z.number().gte(-180).lte(180),
@@ -20,9 +21,13 @@ export const createPanelSchema = z.object({
     images: z.array(z.string().url()).max(8).default([]),
 }).strict();
 
-export const updatePanelSchema = createPanelSchema
+// Cidade e UF saem padronizadas pela lista do IBGE (grafia oficial e UF preenchida)
+export const createPanelSchema = panelBaseSchema.transform(padronizarLocal);
+
+export const updatePanelSchema = panelBaseSchema
     .partial()
     .extend({
         status: z.nativeEnum(PanelStatus).optional(),
     })
-    .strict();
+    .strict()
+    .transform(padronizarLocal);

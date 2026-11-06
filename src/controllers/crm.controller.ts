@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { DealStage, DealStatus, Role } from '@prisma/client';
 import { z } from 'zod';
+import { padronizarLocal } from '../lib/localidades';
 import { prisma } from '../database/prisma';
 import { isRecordNotFound } from '../lib/prismaErrors';
 import { calculateQuote } from '../services/pricing.service';
@@ -8,7 +9,7 @@ import { readAttribution } from '../lib/attribution';
 import { DEAL_LINES, SOLUTION_APPLICATIONS, SOLUTION_SERVICE_LABEL, solutionDetailsSchema } from '../lib/solution';
 import { mailEnabled, sendMailInBackground, solutionRequestEmail } from '../services/mail.service';
 
-const createClientSchema = z.object({
+const clientBaseSchema = z.object({
     name: z.string().min(2),
     document: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
@@ -18,6 +19,9 @@ const createClientSchema = z.object({
     city: z.string().optional(),
     state: z.string().optional(),
 });
+// Cidade e UF padronizadas pela lista do IBGE (grafia oficial e UF preenchida)
+const createClientSchema = clientBaseSchema.transform(padronizarLocal);
+const updateClientSchema = clientBaseSchema.partial().transform(padronizarLocal);
 
 const createDealSchema = z.object({
     // Cliente da carteira ou, sem cadastro, os dados para criar o cliente junto do negócio
@@ -142,7 +146,7 @@ export const crmController = {
     async updateClient(req: Request, res: Response) {
         try {
             const clientId = String(req.params.id); 
-            const data = createClientSchema.partial().parse(req.body); 
+            const data = updateClientSchema.parse(req.body); 
             const { id: userId, role } = (req as any).user;
             
             if (role === 'COMERCIAL') {
