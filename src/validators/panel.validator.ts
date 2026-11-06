@@ -25,6 +25,8 @@ const panelBaseSchema = z.object({
         y: z.number().min(0).max(100),
         fonte: z.enum(['auto', 'manual']),
         objetos: z.array(z.string().max(40)).max(30).optional(),
+        // Pino marcado à mão em cima do telão (edição): a IA procura o telão em volta dele
+        pino: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).strict().optional(),
     }).strict()).nullable().optional()
         // null apaga os focos (o Prisma pede JsonNull em campo JSON)
         .transform((v) => (v === null ? Prisma.JsonNull : v)),
