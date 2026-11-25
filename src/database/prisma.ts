@@ -71,3 +71,6 @@ export const prisma = base.$extends({
 });
 
 export type AppPrismaClient = typeof prisma;
+
+/** Sem o registro automático: só para anonimizar (o "antes" guardaria o dado que se quer apagar). */
+export const prismaSemAuditoria = base;

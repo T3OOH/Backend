@@ -18,4 +18,8 @@ profileRoutes.post('/sessions/revoke-others', profileController.revokeOtherSessi
 profileRoutes.put('/password', profileController.changePassword);
 profileRoutes.get('/orders', profileController.getMyOrders);
 
+// LGPD: cópia dos dados e exclusão da conta pelo próprio titular
+profileRoutes.get('/export', profileController.exportData);
+profileRoutes.delete('/', profileController.deleteAccount);
+
 export { profileRoutes };

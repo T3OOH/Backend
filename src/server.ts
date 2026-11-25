@@ -5,6 +5,7 @@ import { prisma } from './database/prisma';
 import { initWebSocket } from './websocket';
 import { PanelService } from './services/panel.service';
 import { audit, captureConsoleErrors, pruneAuditLogs, syncRepositories } from './services/audit.service';
+import { aplicarRetencao } from './services/retencao.service';
 
 // Erros da API (console.error, falhas não tratadas) entram no registro de auditoria
 captureConsoleErrors();
@@ -32,8 +33,9 @@ httpServer.listen(env.PORT, () => {
     const syncRepos = () => syncRepositories().catch((error) => console.error('[Audit] Falha ao ler o repositório:', error));
     syncRepos();
     setInterval(syncRepos, 15 * 60_000).unref();
-    void pruneAuditLogs();
-    setInterval(() => void pruneAuditLogs(), 24 * 60 * 60_000).unref();
+    const limpezaDiaria = () => { void pruneAuditLogs(); void aplicarRetencao(); };
+    limpezaDiaria();
+    setInterval(limpezaDiaria, 24 * 60 * 60_000).unref();
 });
 
 function shutdown() {

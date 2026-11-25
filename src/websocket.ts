@@ -5,6 +5,7 @@ import { Role } from '@prisma/client';
 import { prisma } from './database/prisma';
 import { env, isAllowedOrigin } from './config/env';
 import { initMeetingsNamespace } from './meetings.socket';
+import { isSessionActive } from './services/session.service';
 
 export let io: Server;
 
@@ -48,16 +49,18 @@ export function initWebSocket(httpServer: HttpServer) {
     // ========================================================
     // AUTENTICAÇÃO NO HANDSHAKE (JWT da equipe interna)
     // ========================================================
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
         const token = socket.handshake.auth?.token as string | undefined;
         if (!token) return next(new Error('Não autenticado.'));
 
         try {
-            const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload & { role?: Role; typ?: string; mid?: string };
+            const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload & { role?: Role; typ?: string; mid?: string; sid?: string };
             if (payload.typ !== undefined || payload.mid !== undefined) return next(new Error('Sem permissão.'));
             if (!payload.sub || !payload.role || !STAFF_ROLES.has(payload.role)) {
                 return next(new Error('Sem permissão.'));
             }
+            // Mesma regra da API: sessão encerrada (sair, trocar senha) não conecta
+            if (payload.sid && !(await isSessionActive(payload.sid))) return next(new Error('Sessão encerrada.'));
             socket.data.user = { id: payload.sub, role: payload.role } satisfies SocketUser;
             return next();
         } catch {
@@ -107,8 +110,9 @@ export function initWebSocket(httpServer: HttpServer) {
                         senderId: user.id,
                         content: text || null,
                         isInternal: Boolean(data.isInternal),
-                        mediaUrl: data.mediaUrl || null,
-                        mediaType: data.mediaType || null,
+                        // Só link https: evita gravar javascript:/data: que viraria XSS se a tela usar o link
+                        mediaUrl: typeof data.mediaUrl === 'string' && /^https:\/\/\S{1,1000}$/.test(data.mediaUrl) ? data.mediaUrl : null,
+                        mediaType: typeof data.mediaType === 'string' ? data.mediaType.slice(0, 50) : null,
                         isRead: false
                     }
                 });

@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 // bcrypt nativo: confere a senha fora da thread principal (o bcryptjs travava a API a cada login)
 import bcrypt from 'bcrypt';
-import { prisma } from '../database/prisma';
+import { prisma, prismaSemAuditoria } from '../database/prisma';
+import { audit } from '../services/audit.service';
 import { registerSchema } from '../validators/auth.validator';
 import { passwordChangedEmail, sendMailInBackground, siteUrl } from '../services/mail.service';
 import { clientIp, describeDevice, logSecurityEvent, revokeSession, revokeUserSessions } from '../services/session.service';
@@ -249,6 +252,64 @@ export const profileController = {
             `${siteUrl()}/recuperar-senha`), 'senha alterada');
 
         return res.json({ message: 'Senha alterada.', closedSessions: closed });
+    },
+
+    /** LGPD art. 18, II e V: cópia dos dados da própria conta em JSON. */
+    async exportData(req: Request, res: Response) {
+        const id = req.user!.id;
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { ...profileSelect, document: true, personType: true, attribution: true, updatedAt: true },
+        });
+        if (!user) return res.status(404).json({ error: 'Conta não encontrada.' });
+        const [orders, deals, sessions, events] = await Promise.all([
+            prisma.order.findMany({ where: { userId: id }, include: { items: true } }),
+            prisma.crmDeal.findMany({ where: { client: { email: { equals: user.email, mode: 'insensitive' } } }, include: { items: true } }),
+            prisma.userSession.findMany({ where: { userId: id }, select: { ip: true, userAgent: true, createdAt: true, lastUsedAt: true, revokedAt: true } }),
+            prisma.securityEvent.findMany({ where: { userId: id }, select: { type: true, ip: true, userAgent: true, createdAt: true } }),
+        ]);
+        res.setHeader('Content-Disposition', 'attachment; filename="meus-dados-t3led.json"');
+        return res.json({ geradoEm: new Date(), conta: toProfile(user), pedidos: orders, propostas: deals, aparelhos: sessions, atividade: events });
+    },
+
+    /**
+     * LGPD art. 18, VI: exclusão da conta a pedido do titular. A conta é anonimizada em vez de apagada:
+     * pedidos e propostas ficam (obrigação legal e contábil, art. 16, I), sem nada que identifique a pessoa.
+     */
+    async deleteAccount(req: Request, res: Response) {
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+        if (!user) return res.status(404).json({ error: 'Conta não encontrada.' });
+        if (user.role !== 'USER' && user.role !== 'COMPANY') {
+            return res.status(403).json({ error: 'Contas da equipe são encerradas pela gestão.' });
+        }
+        if (req.body?.confirmacao !== 'EXCLUIR') return res.status(400).json({ error: 'Digite EXCLUIR para confirmar.' });
+        // Conta só com Google não tem senha conhecida; nas outras a senha confirma que é o dono
+        const password = typeof req.body?.password === 'string' ? req.body.password : '';
+        if (!user.googleId && !(await bcrypt.compare(password, user.password))) {
+            return res.status(400).json({ error: 'A senha não confere.' });
+        }
+
+        const senhaInutil = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
+        const db = prismaSemAuditoria;
+        await db.$transaction([
+            db.user.update({
+                where: { id: user.id },
+                data: {
+                    name: 'Conta excluída',
+                    email: `excluida-${user.id}@t3led.invalid`,
+                    password: senhaInutil,
+                    phone: null, document: null, companyName: null, companyId: null,
+                    googleId: null, preferences: Prisma.DbNull, attribution: Prisma.DbNull, isEmailVerified: false,
+                },
+            }),
+            db.userSession.deleteMany({ where: { userId: user.id } }),
+            db.securityEvent.deleteMany({ where: { userId: user.id } }),
+            // Inclui a cópia que o gatilho do banco acabou de gravar com os dados antigos
+            db.auditLog.deleteMany({ where: { entity: 'users', entityId: user.id } }),
+        ]);
+        await revokeUserSessions(user.id, 'account-deleted').catch(() => 0);
+        void audit.write({ source: 'api', action: 'delete', level: 'warning', entity: 'users', entityId: user.id, summary: 'Conta excluída (anonimizada) a pedido do titular — LGPD art. 18, VI' });
+        return res.status(204).end();
     },
 };
 
