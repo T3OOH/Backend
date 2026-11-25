@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Role } from '@prisma/client';
 import { prisma } from '../database/prisma';
 import { authMiddleware, requireRoles, STAFF_ROLES } from '../middlewares/auth.middleware';
 
@@ -6,10 +7,14 @@ const chatRoutes = Router();
 
 chatRoutes.use(authMiddleware, requireRoles(...STAFF_ROLES));
 
+// Comercial só vê os clientes da própria carteira; gestão vê todos
+const carteira = (req: Request) => (req.user!.role === Role.COMERCIAL ? { sellerId: req.user!.id } : {});
+
 // 1. Buscar todos os contatos da barra lateral
 chatRoutes.get('/contacts', async (req: Request, res: Response) => {
     try {
         const clients = await prisma.crmClient.findMany({
+            where: carteira(req),
             include: {
                 messages: {
                     orderBy: { createdAt: 'desc' },
@@ -21,7 +26,7 @@ chatRoutes.get('/contacts', async (req: Request, res: Response) => {
         // Não lidas enviadas pelo próprio cliente, numa consulta só (antes era uma consulta por cliente)
         const naoLidas = await prisma.crmMessage.groupBy({
             by: ['clientId', 'senderId'],
-            where: { isRead: false },
+            where: { isRead: false, client: carteira(req) },
             _count: { _all: true },
         });
         const unreadPorCliente = new Map<string, number>();
@@ -67,6 +72,9 @@ chatRoutes.get('/:clientId/messages', async (req: Request, res: Response) => {
     const clientId = req.params.clientId as string;
     
     try {
+        const permitido = await prisma.crmClient.findFirst({ where: { id: clientId, ...carteira(req) }, select: { id: true } });
+        if (!permitido) return res.status(403).json({ error: 'Sem permissão para este cliente.' });
+
         const messages = await prisma.crmMessage.findMany({
             where: { clientId: clientId },
             orderBy: { createdAt: 'asc' },

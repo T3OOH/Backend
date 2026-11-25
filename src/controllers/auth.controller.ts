@@ -11,6 +11,8 @@ import { prisma } from '../database/prisma';
 import { env } from '../config/env';
 import { loginSchema, registerSchema } from '../validators/auth.validator';
 import { readAttribution } from '../lib/attribution';
+
+const HASH_FALSO = bcrypt.hashSync(randomBytes(16).toString('hex'), 12);
 import { EMAIL_FROM, mailEnabled, passwordChangedEmail, resetEmail, sendMail, sendMailInBackground } from '../services/mail.service';
 import {
     ACCESS_TTL_SECONDS, SessionError, clearLoginFailures, clientIp, describeDevice, logSecurityEvent, loginLockedFor,
@@ -126,7 +128,8 @@ export const authController = {
 
         const user = await prisma.user.findUnique({ where: { email: validatedData.email } });
 
-        if (!user || !(await bcrypt.compare(validatedData.password, user.password))) {
+        // Sem usuário compara com um hash falso: o tempo de resposta não revela se o e-mail existe
+        if (!(await bcrypt.compare(validatedData.password, user?.password ?? HASH_FALSO)) || !user) {
             const locked = registerLoginFailure(emailKey);
             if (user) await logSecurityEvent(locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', { userId: user.id, req });
             return res.status(401).json({ error: 'Credenciais inválidas.' });
@@ -363,7 +366,10 @@ export const authController = {
         let userId: string | null = null;
         const [scheme, bearer] = req.headers.authorization?.split(' ') ?? [];
         if (scheme === 'Bearer' && bearer) {
-            const payload = jwt.decode(bearer) as { sid?: string; sub?: string } | null;
+            // Assinatura conferida (vencido vale): token forjado não registra logout em nome de outro
+            type Payload = { sid?: string; sub?: string };
+            let payload: Payload | null = null;
+            try { payload = jwt.verify(bearer, env.JWT_SECRET, { algorithms: ['HS256'], ignoreExpiration: true }) as Payload; } catch { /* ignora token inválido */ }
             sid ||= payload?.sid ?? '';
             userId = payload?.sub ?? null;
         }
