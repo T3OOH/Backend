@@ -296,6 +296,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
         });
     }
 
+    // Corpo JSON malformado ou grande demais (express.json): erro de quem chamou, não do servidor
+    const bodyError = (err as { type?: string } | null)?.type;
+    if (bodyError === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido.' });
+    if (bodyError === 'entity.too.large') return res.status(413).json({ error: 'Conteúdo grande demais.' });
+
     if (err instanceof multer.MulterError) {
         return res.status(400).json({ error: err.message });
     }
